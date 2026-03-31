@@ -167,3 +167,38 @@ Given Bun's ~20x slower performance on small async tasks  and your inference con
 - id: go-orchestration-spike
   content: Build minimal Go orchestration service spike focusing on streaming proxy performance; benchmark against Bun implementation with realistic token streaming workloads.
   status: pending
+
+## Phase 6: Remote LM Studio & Agentic Bridge Integration (Current Focus)
+
+With LM Studio operating remotely at `192.168.1.12:1234`, inference alone is insufficient. The proxy bridge must manage embeddings, reranking, context engineering, tool interactions, and skill routing to create a seamless agentic experience.
+
+### 1. Remote Connectivity & Efficiency
+- **Dynamic Configuration Updates**: Completed transitioning all hardcoded `localhost` references in `settings.ts`, `live-benchmark.ts`, `page.tsx`, and `index.ts` to dynamically use `192.168.1.12`.
+- **Remote Embedding Coalescing**: Fixed the `EmbeddingRequestCoalescer` so that batched remote HTTP calls correctly resolve arrays of vectors back to their individual callers, significantly reducing network overhead to the remote LM Studio instance.
+- **Reranking Optimization**: Adapted `handleRerank` to execute a single batched remote embedding request (query + all documents) via the Coalescer, computing cosine similarity locally within the bridge to save bandwidth.
+
+### 2. Context Engineering & I/O Pipeline
+- **Input Pre-processing**:
+  - Implement dynamic prompt truncation based on the specific context window size of the remote model.
+  - Inject structured system prompts formatted optimally for Qwen/Llama models, defining available tools in a strict XML format that the local LLM understands.
+- **Output Post-processing (The "Bridge")**:
+  - Intercept the raw stream from the remote LM Studio.
+  - Parse tool invocation XML/JSON structures on the fly *before* streaming tokens back to the user.
+  - Resolve tool outputs locally (e.g., executing a local search or fetching a file) and automatically re-prompt the remote LLM with the tool results.
+
+### 3. Tool Routing & Execution
+- **Local vs. Remote Execution**:
+  - Distinguish between tools that run on the client/bridge (e.g., `file_read`, `browser_click`, MCP tools) versus tools handled by the agent.
+  - Implement a `ToolOrchestrator` in `mini-services/proxy-bridge/services/tool-orchestrator.ts` to execute local tools securely and format their results as generic user messages or `tool_response` objects compatible with the OpenAI spec.
+- **Fallback Mechanisms**: If the remote model hallucinates a tool call, gracefully catch the parsing error and instruct the model to correct its formatting.
+
+### 4. Required Skills & Knowledge
+To build this robust bridge, the system needs the following "skills":
+- **Context Management**: Dynamically managing conversation history, evicting older messages while keeping the most critical retrieved documents.
+- **Intent Recognition**: A fast, local classifier (or regex heuristics) to decide if a user's prompt requires triggering the Reranker/Embedding retrieval flow *before* sending the request to the remote LM Studio.
+- **Protocol Translation**: Adapting the standard OpenAI `tools` array into the specific system prompt syntax that local models (like Qwen) require for tool use.
+
+### Next Steps / To-Do
+- [ ] **Context Window Manager**: Build a context builder that respects the exact token limits of the active remote model.
+- [ ] **Tool Interceptor Middleware**: Implement a stream parser in `index.ts` that catches `<tool_call>` tags, executes the tool, and automatically issues a follow-up request to LM Studio.
+- [ ] **RAG Intent Pipeline**: Connect the `EmbeddingRequestCoalescer` to the user's chat input so that relevant workspace context is fetched and injected before the LLM is queried.

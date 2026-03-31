@@ -63,7 +63,7 @@ export function Sidebar({ status, models, uptime }: SidebarProps) {
               )}
             </div>
             <div className="text-xs font-mono text-slate-300 bg-slate-800 px-2 py-1 rounded">
-              http://localhost:1234
+              http://192.168.1.12:1234
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <Timer className="w-3 h-3" />

@@ -4,7 +4,7 @@
  * Run with: bun run live-benchmark.ts
  */
 
-const LM_STUDIO_URL = "http://localhost:1234";
+const LM_STUDIO_URL = "http://192.168.1.12:1234";
 const PROXY_BRIDGE_URL = "http://localhost:3001";
 const RESULTS_FILE = "benchmark-results.json";
 
@@ -60,8 +60,8 @@ async function checkServices(): Promise<ServiceStatus> {
   console.log("  Checking Services");
   console.log("=".repeat(46) + "\n");
   
-  const lmStudio = await testPort("localhost", 1234);
-  console.log(`LM Studio (port 1234): ${lmStudio ? "✓ OK" : "✗ FAILED"}`);
+  const lmStudio = await testPort("192.168.1.12", 1234);
+  console.log(`LM Studio (192.168.1.12:1234): ${lmStudio ? "✓ OK" : "✗ FAILED"}`);
   
   const proxyBridge = await testPort("localhost", 3001);
   console.log(`Proxy Bridge (port 3001): ${proxyBridge ? "✓ OK" : "✗ FAILED"}`);

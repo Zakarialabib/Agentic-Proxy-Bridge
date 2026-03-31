@@ -2292,22 +2292,27 @@ async function handleRerank(req: Request): Promise<Response> {
   try {
     const startTime = Date.now();
     
-    // Get embedding for query
-    const queryEmb = await currentEmbeddingModel!.embed(query);
-    
-    // Get embeddings for all documents
-    const docEmbeddings = await Promise.all(
-      documents.slice(0, 20).map(async (doc: string | { text?: string; content?: string }) => {
-        const docText = typeof doc === 'string' ? doc : (doc.text || doc.content || '');
-        const docEmb = await currentEmbeddingModel!.embed(docText);
-        return { text: docText, embedding: docEmb.embedding };
-      })
+    // Extract all texts to embed
+    const queryText = query;
+    const docTexts = documents.slice(0, 20).map((doc: string | { text?: string; content?: string }) => 
+      typeof doc === 'string' ? doc : (doc.text || doc.content || '')
     );
+    const allTexts = [queryText, ...docTexts];
+    
+    // Get embeddings for query and documents in one batch via coalescer
+    const embeddings = await embeddingCoalescer.getEmbeddings(allTexts, modelKey);
+    
+    if (!embeddings || embeddings.length !== allTexts.length) {
+      throw new Error("Failed to get embeddings for all documents");
+    }
+    
+    const queryEmb = embeddings[0];
+    const docEmbeddings = embeddings.slice(1);
     
     // Calculate cosine similarities
-    const results = docEmbeddings.map(({ text, embedding }) => {
-      const similarity = cosineSimilarity(queryEmb.embedding, embedding);
-      return { text, score: similarity };
+    const results = docEmbeddings.map((embedding, i) => {
+      const similarity = cosineSimilarity(queryEmb, embedding);
+      return { text: docTexts[i], score: similarity };
     });
     
     // Sort by score descending
@@ -3286,7 +3291,8 @@ const embeddingCoalescer = initializeEmbeddingCoalescer(
   async (texts, model) => {
     return await connectionPool.execute(
       async () => {
-        const res = await fetch('http://localhost:1234/v1/embeddings', {
+        const settings = getSettingsManager().getLMStudioConnection();
+        const res = await fetch(`http://${settings.host}:${settings.port}/v1/embeddings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ input: texts, model }),

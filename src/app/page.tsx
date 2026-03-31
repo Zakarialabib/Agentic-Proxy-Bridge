@@ -697,7 +697,7 @@ export default function ProxyBridgeDashboard() {
   const [settingsTab, setSettingsTab] = useState<'connection' | 'proxy' | 'retrieval' | 'vram' | 'export'>('connection')
   
   // Settings configuration state
-  const [lmStudioHost, setLmStudioHost] = useState('localhost')
+  const [lmStudioHost, setLmStudioHost] = useState('192.168.1.12')
   const [lmStudioPort, setLmStudioPort] = useState(1234)
   const [autoConnect, setAutoConnect] = useState(true)
   const [streamingEnabled, setStreamingEnabled] = useState(true)
@@ -721,7 +721,7 @@ export default function ProxyBridgeDashboard() {
       const res = await fetch(`/api/proxy/settings?XTransformPort=${PROXY_PORT}`)
       if (res.ok) {
         const data = await res.json()
-        setLmStudioHost(data.lm_studio?.host || 'localhost')
+        setLmStudioHost(data.lm_studio?.host || '192.168.1.12')
         setLmStudioPort(data.lm_studio?.port || 1234)
         setAutoConnect(data.lm_studio?.auto_connect ?? true)
         setStreamingEnabled(data.proxy?.streaming_enabled ?? true)
@@ -1419,7 +1419,7 @@ export default function ProxyBridgeDashboard() {
                     )}
                   </div>
                   <div className="text-xs font-mono text-slate-300 bg-slate-800 px-2 py-1 rounded">
-                    http://localhost:1234
+                    http://192.168.1.12:1234
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-400">
                     <Timer className="w-3 h-3" />
@@ -3707,7 +3707,7 @@ export default function ProxyBridgeDashboard() {
                           const text = await file.text()
                           const data = JSON.parse(text)
                           if (data.settings) {
-                            setLmStudioHost(data.settings.lmStudioHost || 'localhost')
+                            setLmStudioHost(data.settings.lmStudioHost || '192.168.1.12')
                             setLmStudioPort(data.settings.lmStudioPort || 1234)
                             setAutoConnect(data.settings.autoConnect ?? true)
                             setStreamingEnabled(data.settings.streamingEnabled ?? true)
@@ -3739,7 +3739,7 @@ export default function ProxyBridgeDashboard() {
                       variant="destructive"
                       className="mt-2"
                       onClick={() => {
-                        setLmStudioHost('localhost')
+                        setLmStudioHost('192.168.1.12')
                         setLmStudioPort(1234)
                         setAutoConnect(true)
                         setStreamingEnabled(true)
