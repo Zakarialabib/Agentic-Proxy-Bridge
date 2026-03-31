@@ -21,24 +21,44 @@ import {
   type EmbeddingModel
 } from "@lmstudio/sdk";
 
-// Buffer Pool for Streaming Optimization
+// Enhanced Buffer Pool for Streaming Optimization - Bun-optimized
 class BufferPool {
   private pool: Uint8Array[] = [];
   private readonly maxPoolSize = 100;
   private readonly bufferSize = 8192;
+  private readonly smallBufferSize = 1024;
+  private smallPool: Uint8Array[] = [];
 
-  acquire(): Uint8Array {
-    return this.pool.pop() || new Uint8Array(this.bufferSize);
+  acquire(size: number = this.bufferSize): Uint8Array {
+    if (size === this.smallBufferSize) {
+      return this.smallPool.pop() || new Uint8Array(this.smallBufferSize);
+    }
+    return this.pool.pop() || new Uint8Array(size);
   }
 
   release(buffer: Uint8Array): void {
-    if (this.pool.length < this.maxPoolSize && buffer.length === this.bufferSize) {
+    if (buffer.length === this.bufferSize && this.pool.length < this.maxPoolSize) {
       this.pool.push(buffer);
+    } else if (buffer.length === this.smallBufferSize && this.smallPool.length < this.maxPoolSize) {
+      this.smallPool.push(buffer);
     }
+  }
+
+  getStats() {
+    return {
+      largeBuffers: this.pool.length,
+      smallBuffers: this.smallPool.length,
+      totalMemory: (this.pool.length * this.bufferSize + this.smallPool.length * this.smallBufferSize) / 1024
+    };
   }
 }
 
 const bufferPool = new BufferPool();
+
+// Bun-optimized async delay
+async function bunSleep(ms: number): Promise<void> {
+  await Bun.sleep(ms);
+}
 
 // Memory Pressure Monitoring
 function checkMemoryPressure(): { pressure: 'low' | 'medium' | 'high'; usage: number } {
@@ -51,6 +71,47 @@ function checkMemoryPressure(): { pressure: 'low' | 'medium' | 'high'; usage: nu
 function shouldThrottleRequests(): boolean {
   return checkMemoryPressure().pressure === 'high';
 }
+
+// Bun-specific performance: Memory monitoring with detailed stats
+function getDetailedMemoryStats() {
+  const mem = Bun.memory();
+  return {
+    heapUsed: Math.round(mem.heap.used / 1024 / 1024),
+    heapTotal: Math.round(mem.heap.total / 1024 / 1024),
+    external: Math.round(mem.external / 1024 / 1024),
+    unitCount: mem.unitCount,
+    rapidJSON: mem.rapidJSON,
+    pressure: checkMemoryPressure()
+  };
+}
+
+// JIT warmup function - run dummy requests to warm up the JIT
+async function warmupJIT(): Promise<void> {
+  console.log('[Performance] JIT warmup starting...');
+  const warmupStart = Date.now();
+  
+  // Warmup: Run several dummy async operations
+  const promises = [];
+  for (let i = 0; i < 5; i++) {
+    promises.push(Promise.resolve(i * i).then(x => x + 1));
+  }
+  await Promise.all(promises);
+  
+  // Warmup string operations
+  const str = 'warmup_string_operation_for_jit';
+  for (let i = 0; i < 100; i++) {
+    const _ = str.toLowerCase().includes('test');
+    const __ = str.split('_');
+    const ___ = str.replace('warmup', 'warmed');
+  }
+  
+  // Warmup hash operations
+  for (let i = 0; i < 50; i++) {
+    const _ = Bun.hash(`warmup_${i}`);
+  }
+  
+  console.log(`[Performance] JIT warmup completed in ${Date.now() - warmupStart}ms`);
+}
 import { z } from "zod";
 import { Database } from "bun:sqlite";
 import { v4 as uuidv4 } from "uuid";
@@ -62,11 +123,14 @@ import { buildContext } from "./context-builder";
 import { toLMStudioInput, toOpenAIChatResponse } from "./openai-adapter";
 import { dispatchRoute, type RouteDefinition } from "./routes";
 
-// Phase 8: Stability & Performance Services
+// Stability Services: Connection Pool, Embedding Coalescer, Streaming Optimizer
 import { initializeConnectionPool } from "./services/lm-studio-connection-pool";
 import { initializeEmbeddingCoalescer } from "./services/embedding-request-coalescer";
 import { StreamingLatencyOptimizer, createStreamingResponse, type BackpressureConfig } from "./services/streaming-latency-optimizer";
 import { initializePrometheusMetrics, getPrometheusMetrics } from "./services/prometheus-metrics";
+import { initializePerformanceDashboard, getPerformanceDashboard } from "./services/performance-dashboard";
+import { initializeConfigTuner, getConfigTuner } from "./services/config-tuner";
+import { initializePerformanceAdvisor, getPerformanceAdvisor } from "./services/performance-advisor";
 
 async function* streamFromResponse(response: Response): AsyncGenerator<Uint8Array> {
   const reader = response.body!.getReader();
@@ -1123,22 +1187,19 @@ function analyzeContextForPreTrigger(
 
 // Pre-trigger tools based on context
 async function preTriggerTools(tools: string[]): Promise<void> {
-  for (const toolName of tools) {
+  await Promise.all(tools.map(async (toolName) => {
     const state = toolPreStates.get(toolName);
     if (state && state.status === "idle") {
       state.status = "pre-warming";
       state.pre_warmed_at = Date.now();
       state.predicted_use = 0.8;
       
-      // Simulate pre-warming (in real implementation, this would establish connections)
       console.log(`[PreTrigger] Pre-warming tool: ${toolName}`);
       
-      // Mark as ready after a short delay
-      setTimeout(() => {
-        state.status = "ready";
-      }, 100);
+      await bunSleep(100);
+      state.status = "ready";
     }
-  }
+  }));
 }
 
 // ============== Recursive Similarity Expansion ==============
@@ -2169,36 +2230,10 @@ async function handleNonStreaming(
 }
 
 async function handleEmbeddings(req: Request): Promise<Response> {
-  const connected = await ensureClient();
-  if (!connected || !client) {
-    return Response.json({ error: "LM Studio not connected. Please ensure LM Studio is running." }, { status: 503 });
-  }
-  
   const body = await req.json();
   const { input, model } = body;
   
-  const modelKey = model || "text-embedding-qwen3-embedding-4b";
-  
-  try {
-    if (!currentEmbeddingModel || currentEmbeddingModel.identifier !== modelKey) {
-      if (currentEmbeddingModel) await currentEmbeddingModel.unload();
-      
-      const loadedEmbeddings = await client.embedding.listLoaded();
-      const alreadyLoaded = loadedEmbeddings.find(m => m.identifier === modelKey || m.modelKey === modelKey);
-      
-      if (alreadyLoaded) {
-        currentEmbeddingModel = alreadyLoaded;
-        console.log(`[Embedding] Using already loaded: ${currentEmbeddingModel.identifier}`);
-      } else {
-        currentEmbeddingModel = await client.embedding.load(modelKey);
-        console.log(`[Embedding] Loaded: ${currentEmbeddingModel.identifier}`);
-      }
-    }
-  }
-  catch (e) { 
-    return Response.json({ error: ERRORS.modelFailed(String(e)) }, { status: 500 }); 
-  }
-  
+  const modelKey = model || "text-embedding-nomic-embed-text-v1.5";
   const text = Array.isArray(input) ? input : [input];
   
   try {
@@ -2214,6 +2249,7 @@ async function handleEmbeddings(req: Request): Promise<Response> {
       model: modelKey
     });
   } catch (e) {
+    console.error(`[Embedding] Error: ${String(e)}`);
     return Response.json({ error: `Embedding generation failed: ${String(e)}` }, { status: 500 });
   }
 }
@@ -2551,6 +2587,7 @@ async function handleStatus(): Promise<Response> {
   const a2aAvailable = [...a2aAgents.values()].filter(a => a.status === "available").length;
   const asyncPending = [...asyncTasks.values()].filter(t => t.status === "running").length;
   const preTriggered = [...toolPreStates.values()].filter(s => s.status === "ready").length;
+  const memStats = getDetailedMemoryStats();
   
   return Response.json({
     status: "running", 
@@ -2560,6 +2597,14 @@ async function handleStatus(): Promise<Response> {
     approval_mode: currentApprovalMode,
     active_sessions: sessions.size,
     documents_indexed: documentEmbeddings.size,
+    
+    // Bun-specific memory stats
+    memory: {
+      heap_used_mb: memStats.heapUsed,
+      heap_total_mb: memStats.heapTotal,
+      external_mb: memStats.external,
+      buffer_pool: bufferPool.getStats()
+    },
     
     // Knowledge Graph
     knowledge_graph: {
@@ -3182,6 +3227,9 @@ initializeMCPServers();
 initializeA2AAgents();
 getSettingsManager(); // Initialize settings
 
+// JIT warmup for optimal first-request performance
+warmupJIT().catch(console.error);
+
 const coreRoutes: RouteDefinition[] = [
   { path: "/v1/models", method: "GET", handler: async () => handleModels() },
   { path: "/v1/chat/completions", method: "POST", handler: async (request) => handleChatCompletions(request) },
@@ -3191,7 +3239,7 @@ const coreRoutes: RouteDefinition[] = [
   { path: "/api/proxy/status", method: "GET", handler: async () => handleStatus() },
 ];
 
-// ============== Phase 8 Service Initialization ==============
+// ============== Stability Services Initialization ==============
 
 // Initialize Prometheus metrics
 const prometheusMetrics = initializePrometheusMetrics();
@@ -3285,12 +3333,119 @@ embeddingCoalescer.on('batchError', (ev) => {
   prometheusMetrics.recordPoolError();
 });
 
+// Initialize Performance Dashboard
+const performanceDashboard = initializePerformanceDashboard(
+  connectionPool,
+  embeddingCoalescer,
+  prometheusMetrics
+);
+
+// Initialize ConfigTuner
+const configTuner = initializeConfigTuner(
+  connectionPool,
+  embeddingCoalescer,
+  {
+    queueCapacityThreshold: 0.8,
+    queuePressureDurationMs: 30000,
+    queueIdleDurationMs: 60000,
+    batchFullThreshold: 0.9,
+    backpressureEventsThreshold: 10,
+    minConnections: 1,
+    maxConnections: 50,
+    minBatchSize: 64,
+    maxBatchSize: 512,
+    minHighWaterMark: 32 * 1024,
+    maxHighWaterMark: 256 * 1024,
+  },
+  {
+    highWaterMark: 64 * 1024,
+    lowWaterMark: 16 * 1024,
+  }
+);
+
+// Handler for config tuning endpoints
+async function handleConfigTuning(req: Request, method: string): Promise<Response> {
+  if (method === 'GET') {
+    const recommendations = configTuner.getRecommendations();
+    const currentConfig = configTuner.getConfig();
+    const backpressureConfig = configTuner.getCurrentBackpressureConfig();
+    const poolStats = connectionPool.getStats();
+    const coalescerStats = embeddingCoalescer.getStats();
+
+    return Response.json({
+      recommendations,
+      currentConfig,
+      currentSettings: {
+        pool: {
+          maxConnections: poolStats.maxConnections,
+          activeConnections: poolStats.activeConnections,
+          queuedRequests: poolStats.queuedRequests,
+          utilizationPercent: poolStats.utilizationPercent,
+        },
+        coalescer: {
+          batchSize: 128,
+          activeBatches: coalescerStats.activeBatches,
+          pendingRequests: Object.fromEntries(coalescerStats.pendingRequests),
+        },
+        streaming: backpressureConfig,
+      },
+      timestamp: Date.now(),
+    });
+  }
+
+  if (method === 'POST') {
+    const body = await req.json();
+    const { recommendation_id, apply_all } = body;
+
+    if (apply_all) {
+      const recommendations = configTuner.getRecommendations();
+      let appliedCount = 0;
+      for (const rec of recommendations) {
+        if (configTuner.applyRecommendation(rec)) {
+          rec.applied = true;
+          appliedCount++;
+        }
+      }
+      return Response.json({
+        success: true,
+        appliedCount,
+        message: `Applied ${appliedCount} recommendations`,
+      });
+    }
+
+    if (recommendation_id) {
+      const allRecs = configTuner.getAllRecommendations();
+      const rec = allRecs.find(r => r.id === recommendation_id);
+      if (!rec) {
+        return Response.json({ error: 'Recommendation not found' }, { status: 404 });
+      }
+      const success = configTuner.applyRecommendation(rec);
+      if (success) {
+        rec.applied = true;
+      }
+      return Response.json({ success, recommendation: rec });
+    }
+
+    return Response.json({ error: 'Missing recommendation_id or apply_all' }, { status: 400 });
+  }
+
+  return Response.json({ error: 'Method not allowed' }, { status: 405 });
+}
+
 serve({
   port: PORT,
+  reusePort: true,
+  highwaterMark: 64 * 1024,
   async fetch(req: Request) {
     const url = new URL(req.url);
     const path = url.pathname;
-    const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Agent-Type" };
+    const cors = { 
+      "Access-Control-Allow-Origin": "*", 
+      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS", 
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Agent-Type",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=60, max=100"
+    };
     
     if (req.method === "OPTIONS") return new Response(null, { headers: cors });
     
@@ -3391,8 +3546,8 @@ serve({
       if (path.startsWith("/api/proxy/observability/negotiations/") && req.method === "POST") return await handleObservabilityNegotiationRespond(req, path.split("/")[5]);
       if (path === "/api/proxy/observability/failures") return await handleObservabilityFailures();
       
-      // Phase 8: Service statistics
-      if (path === "/api/proxy/stats/phase8" && req.method === "GET") {
+      // Stability Services: statistics
+      if (path === "/api/proxy/stats/stability" && req.method === "GET") {
         const poolStats = connectionPool.getStats();
         const coalescerStats = embeddingCoalescer.getStats();
         return Response.json({
@@ -3409,6 +3564,92 @@ serve({
           },
           timestamp: Date.now(),
         });
+      }
+
+      // Benchmark endpoints
+      if (path === "/api/proxy/benchmark" && req.method === "GET") {
+        const { benchmarkAll } = await import('./benchmark');
+        const results = await benchmarkAll();
+        return Response.json({ results });
+      }
+
+      if (path === "/api/proxy/benchmark/chat" && req.method === "POST") {
+        const { benchmarkChatCompletions } = await import('./benchmark');
+        const body = await req.json().catch(() => ({}));
+        const iterations = body.iterations || 50;
+        const result = await benchmarkChatCompletions(iterations);
+        return Response.json(result);
+      }
+
+      if (path === "/api/proxy/benchmark/embeddings" && req.method === "GET") {
+        const { benchmarkEmbeddings } = await import('./benchmark');
+        const url = new URL(req.url);
+        const iterations = parseInt(url.searchParams.get('iterations') || '50');
+        const result = await benchmarkEmbeddings(iterations);
+        return Response.json(result);
+      }
+
+      if (path === "/api/proxy/benchmark/concurrent" && req.method === "GET") {
+        const { benchmarkConcurrentLoad } = await import('./benchmark');
+        const url = new URL(req.url);
+        const concurrency = parseInt(url.searchParams.get('concurrency') || '10');
+        const result = await benchmarkConcurrentLoad(concurrency);
+        return Response.json(result);
+      }
+
+      if (path === "/api/proxy/benchmark/pool" && req.method === "GET") {
+        const { benchmarkConnectionPool } = await import('./benchmark');
+        const result = await benchmarkConnectionPool();
+        return Response.json(result);
+      }
+
+      if (path === "/api/proxy/benchmark/coalescer" && req.method === "GET") {
+        const { benchmarkCoalescer } = await import('./benchmark');
+        const result = await benchmarkCoalescer();
+        return Response.json(result);
+      }
+
+      if (path === "/api/proxy/benchmark/streaming" && req.method === "GET") {
+        const { benchmarkStreaming } = await import('./benchmark');
+        const result = await benchmarkStreaming();
+        return Response.json(result);
+      }
+
+      // Config tuning endpoints
+      if (path === "/api/proxy/config/tuning" && (req.method === "GET" || req.method === "POST")) {
+        return await handleConfigTuning(req, req.method);
+      }
+
+      // Performance recommendations endpoints
+      if (path === "/api/proxy/recommendations" && req.method === "GET") {
+        const recommendations = performanceAdvisor.getRecommendations();
+        return Response.json({ recommendations, timestamp: Date.now() });
+      }
+      if (path.startsWith("/api/proxy/recommendations/") && req.method === "GET") {
+        const ruleId = path.split("/")[4];
+        const recommendation = performanceAdvisor.getRecommendation(ruleId);
+        if (recommendation) {
+          return Response.json(recommendation);
+        }
+        return Response.json({ error: "Rule not found" }, { status: 404 });
+      }
+
+      // Performance Dashboard endpoints
+      if (path === "/api/proxy/dashboard" && req.method === "GET") {
+        const dashboard = performanceDashboard.getDashboardMetrics();
+        return Response.json(dashboard);
+      }
+
+      if (path === "/api/proxy/health" && req.method === "GET") {
+        const health = performanceDashboard.getHealthStatus();
+        return Response.json(health);
+      }
+
+      if (path === "/api/proxy/dashboard/history" && req.method === "GET") {
+        const url = new URL(req.url);
+        const minutes = parseInt(url.searchParams.get("minutes") || "5");
+        const history = performanceDashboard.getHistoricalData(minutes);
+        return Response.json({ history, timestamp: Date.now() });
       }
       
       // Prometheus metrics endpoint

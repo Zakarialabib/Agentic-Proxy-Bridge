@@ -1,5 +1,5 @@
 /**
- * Prometheus Metrics for Phase 8 Services
+ * Prometheus Metrics for Stability Services
  * Provides Prometheus-compatible metrics for connection pool and embedding coalescer
  */
 

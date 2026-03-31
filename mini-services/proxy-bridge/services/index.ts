@@ -8,6 +8,7 @@ export { ProtocolRouterImpl } from './protocol-router'
 export { SessionOrchestratorImpl } from './session-orchestrator'
 export { KnowledgeIntegratorImpl } from './knowledge-integrator'
 export { PreTriggeringEngineImpl } from './pre-triggering-engine'
+export { PerformanceAdvisor, getPerformanceAdvisor, initializePerformanceAdvisor } from './performance-advisor'
 
 export type {
   ContextOrchestrator,
@@ -16,3 +17,5 @@ export type {
   KnowledgeIntegrator,
   PreTriggeringEngine
 } from './types'
+
+export type { Priority, Rule, MetricsSnapshot, Recommendation } from './performance-advisor'

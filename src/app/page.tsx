@@ -116,6 +116,7 @@ import { Slider } from "@/components/ui/slider"
 import { useStatefulChat } from "@/hooks/use-stateful-chat"
 import { useSystemStatusData } from "@/hooks/use-system-status"
 import { ModelSelector } from "@/components/model-selector"
+import { Phase8Dashboard } from "@/components/Phase8Dashboard"
 
 // Types
 interface ProxyStatus {
@@ -1376,6 +1377,7 @@ export default function ProxyBridgeDashboard() {
                 { value: 'protocols', icon: Network, label: 'Protocols' },
                 { value: 'tools', icon: Wrench, label: 'Tools' },
                 { value: 'observability', icon: Eye, label: 'Observability' },
+                { value: 'performance', icon: Gauge, label: 'Performance' },
                 { value: 'chat', icon: MessageSquare, label: 'Chat' },
               ].map(tab => (
                 <TabsTrigger
@@ -3107,6 +3109,11 @@ export default function ProxyBridgeDashboard() {
                     </Card>
                   </div>
                 </div>
+              </TabsContent>
+
+              {/* Performance Tab */}
+              <TabsContent value="performance" className="mt-0">
+                <Phase8Dashboard />
               </TabsContent>
 
               {/* Chat Tab */}
