@@ -1,0 +1,246 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio-bridge/default",
+  "small_model": "lmstudio-bridge/fast",
+  "logLevel": "INFO",
+  "disabled_providers": [
+    "anthropic",
+    "openai",
+    "google",
+    "github",
+    "cohere",
+    "mistral",
+    "bedrock"
+  ],
+  "provider": {
+    "lmstudio-bridge": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio Bridge (Qwen3)",
+      "options": {
+        "baseURL": "http://localhost:3001/v1"
+      },
+      "models": {
+        "default": {
+          "name": "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2",
+          "limit": {
+            "context": 32768,
+            "output": 8192
+          }
+        },
+        "fast": {
+          "name": "liquid/lfm2.5-1.2b",
+          "limit": {
+            "context": 8192,
+            "output": 4096
+          }
+        },
+        "reasoning": {
+          "name": "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2",
+          "limit": {
+            "context": 32768,
+            "output": 8192
+          }
+        },
+        "embedding": {
+          "name": "text-embedding-qwen3-embedding-4b"
+        },
+        "embedding-nomic": {
+          "name": "text-embedding-nomic-embed-text-v1.5"
+        },
+        "reranker-fast": {
+          "name": "qwen3-reranker-0.6b"
+        },
+        "reranker-deep": {
+          "name": "qwen.qwen3-reranker-4b"
+        }
+      }
+    },
+    "lmstudio-direct": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio (Direct)",
+      "options": {
+        "baseURL": "http://localhost:1234/v1"
+      },
+      "models": {
+        "default": {
+          "name": "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2"
+        }
+      }
+    }
+  },
+
+  "agent": {
+    "build": {
+      "description": "Primary development agent with full tools",
+      "model": "lmstudio-bridge/default",
+      "temperature": 0.4,
+      "top_p": 0.9,
+      "steps": 12,
+      "mode": "primary",
+      "permission": {
+        "read": "allow",
+        "edit": "allow",
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "npm *": "allow",
+          "ls *": "allow",
+          "rm *": "deny",
+          "pkill *": "deny"
+        },
+        "grep": "allow",
+        "glob": "allow",
+        "list": "allow",
+        "lsp": "allow",
+        "question": "allow",
+        "webfetch": "ask",
+        "websearch": "deny",
+        "external_directory": "deny",
+        "skill": "allow"
+      }
+    },
+
+    "plan": {
+      "description": "Planning & analysis agent (read-focused)",
+      "model": "lmstudio-bridge/fast",
+      "temperature": 0.2,
+      "top_p": 0.8,
+      "steps": 5,
+      "mode": "primary",
+      "permission": {
+        "read": "allow",
+        "edit": "deny",
+        "bash": {
+          "git status": "allow",
+          "git log": "allow",
+          "git diff": "allow",
+          "*": "deny"
+        },
+        "grep": "allow",
+        "glob": "allow",
+        "list": "allow",
+        "lsp": {
+          "hover": "allow",
+          "definition": "allow",
+          "*": "deny"
+        },
+        "question": "allow",
+        "webfetch": "ask"
+      }
+    },
+
+    "reasoning-expert": {
+      "description": "Deep analysis for complex problems",
+      "model": "lmstudio-bridge/default",
+      "temperature": 0.1,
+      "steps": 8,
+      "mode": "subagent",
+      "color": "accent",
+      "permission": {
+        "read": "allow",
+        "edit": "ask",
+        "bash": {
+          "git *": "allow",
+          "*": "ask"
+        },
+        "grep": "allow",
+        "lsp": "allow"
+      }
+    },
+
+    "debugger": {
+      "description": "Investigation and debugging specialist",
+      "model": "lmstudio-bridge/default",
+      "temperature": 0.2,
+      "steps": 10,
+      "mode": "subagent",
+      "color": "warning",
+      "permission": {
+        "read": "allow",
+        "bash": "allow",
+        "grep": "allow",
+        "lsp": "allow",
+        "edit": "ask",
+        "external_directory": {
+          "logs/**": "allow"
+        }
+      }
+    },
+
+    "refactor-expert": {
+      "description": "Safe refactoring with comprehensive analysis",
+      "model": "lmstudio-bridge/default",
+      "temperature": 0.15,
+      "steps": 10,
+      "mode": "subagent",
+      "color": "info",
+      "permission": {
+        "read": "allow",
+        "edit": "ask",
+        "bash": {
+          "git diff": "allow",
+          "git status": "allow",
+          "*": "ask"
+        },
+        "grep": "allow",
+        "lsp": "allow"
+      }
+    },
+
+    "explore": {
+      "description": "Fast codebase exploration (read-only)",
+      "model": "lmstudio-bridge/fast",
+      "temperature": 0.3,
+      "steps": 5,
+      "mode": "subagent",
+      "permission": {
+        "read": "allow",
+        "bash": {
+          "git *": "allow"
+        },
+        "grep": "allow",
+        "glob": "allow",
+        "list": "allow",
+        "lsp": {
+          "hover": "allow",
+          "definition": "allow"
+        }
+      }
+    },
+
+    "reviewer": {
+      "description": "Code quality & style review",
+      "model": "lmstudio-bridge/default",
+      "temperature": 0.1,
+      "steps": 6,
+      "mode": "subagent",
+      "color": "success",
+      "permission": {
+        "read": "allow",
+        "grep": "allow",
+        "lsp": "allow",
+        "bash": {
+          "git diff": "allow"
+        }
+      }
+    }
+  },
+
+  "permission": {
+    "read": {
+      ".env*": "deny"
+    },
+    "external_directory": "deny",
+    "websearch": "deny"
+  },
+
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 8000
+  },
+
+  "snapshot": true,
+  "share": "manual",
+  "autoupdate": "notify"
+}

@@ -1,0 +1,16 @@
+{
+  "lm_studio": {
+    "host": "localhost",
+    "port": 1234,
+    "auto_connect": true
+  },
+  "proxy": {
+    "port": 3001,
+    "cors_enabled": true
+  },
+  "vram": {
+    "budget_mb": 8192,
+    "warning_threshold_percent": 75,
+    "critical_threshold_percent": 90
+  }
+}
