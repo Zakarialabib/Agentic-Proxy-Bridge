@@ -21,7 +21,7 @@
       },
       "models": {
         "default": {
-          "name": "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2",
+          "name": "qwen3.5-4b",
           "limit": {
             "context": 32768,
             "output": 8192
@@ -35,7 +35,7 @@
           }
         },
         "reasoning": {
-          "name": "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2",
+          "name": "qwen3.5-4b",
           "limit": {
             "context": 32768,
             "output": 8192
@@ -60,12 +60,11 @@
       },
       "models": {
         "default": {
-          "name": "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2"
+          "name": "qwen3.5-4b"
         }
       }
     }
   },
-
   "agent": {
     "build": {
       "description": "Primary development agent with full tools",
@@ -96,7 +95,6 @@
         "skill": "allow"
       }
     },
-
     "plan": {
       "description": "Planning & analysis agent (read-focused)",
       "model": "lmstudio-bridge/fast",
@@ -125,7 +123,6 @@
         "webfetch": "ask"
       }
     },
-
     "reasoning-expert": {
       "description": "Deep analysis for complex problems",
       "model": "lmstudio-bridge/default",
@@ -144,7 +141,6 @@
         "lsp": "allow"
       }
     },
-
     "debugger": {
       "description": "Investigation and debugging specialist",
       "model": "lmstudio-bridge/default",
@@ -163,7 +159,6 @@
         }
       }
     },
-
     "refactor-expert": {
       "description": "Safe refactoring with comprehensive analysis",
       "model": "lmstudio-bridge/default",
@@ -183,7 +178,6 @@
         "lsp": "allow"
       }
     },
-
     "explore": {
       "description": "Fast codebase exploration (read-only)",
       "model": "lmstudio-bridge/fast",
@@ -204,7 +198,6 @@
         }
       }
     },
-
     "reviewer": {
       "description": "Code quality & style review",
       "model": "lmstudio-bridge/default",
@@ -222,7 +215,6 @@
       }
     }
   },
-
   "permission": {
     "read": {
       ".env*": "deny"
@@ -230,13 +222,11 @@
     "external_directory": "deny",
     "websearch": "deny"
   },
-
   "compaction": {
     "auto": true,
     "prune": true,
     "reserved": 8000
   },
-
   "snapshot": true,
   "share": "manual",
   "autoupdate": "notify"

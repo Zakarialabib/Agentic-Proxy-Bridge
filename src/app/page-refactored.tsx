@@ -30,11 +30,11 @@ export default function ProxyBridgeDashboard() {
   const [uptime, setUptime] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([])
-  
+
   const { currentModel, setCurrentModel, metrics, cacheStats, sendMessage, loadModels, loadModel, unloadModel } = useInference({
-    defaultModel: 'qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2'
+    defaultModel: 'qwen3.5-4b'
   })
-  
+
   const { isStreaming, streamedContent, startStream } = useStreamingChat(currentModel)
   const { presets, mrlPresets, rerankerConfigs } = useEmbeddingPresets()
 
@@ -76,24 +76,24 @@ export default function ProxyBridgeDashboard() {
     fetchA2AAgents()
     fetchAsyncTasks()
     loadModels()
-    
+
     const interval = setInterval(() => {
       fetchStatus()
       fetchAsyncTasks()
       setUptime(prev => prev + 1)
     }, 3000)
-    
+
     return () => clearInterval(interval)
   }, [fetchStatus, fetchTools, fetchKnowledge, fetchMCPServers, fetchA2AAgents, fetchAsyncTasks, loadModels])
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return
-    
+
     setIsLoading(true)
     const userMessage = inputMessage
     setInputMessage('')
     setMessages(prev => [...prev, { role: 'user', content: userMessage }])
-    
+
     try {
       const response = await sendMessage(userMessage, messages)
       const assistantContent = response.choices?.[0]?.message?.content || 'No response'
@@ -118,7 +118,7 @@ export default function ProxyBridgeDashboard() {
   return (
     <div className="min-h-screen flex flex-col bg-[#0f172a]">
       <DashboardHeader status={status} uptime={uptime} proxyPort={PROXY_PORT} />
-      
+
       <nav className="border-b border-slate-700/50 bg-slate-800/30">
         <div className="container mx-auto px-4">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -173,7 +173,7 @@ export default function ProxyBridgeDashboard() {
                     </Button>
                   </CardContent>
                 </Card>
-                
+
                 <Card className="bg-slate-800/30 border-slate-700/50">
                   <CardHeader>
                     <CardTitle className="text-white">Active Models</CardTitle>
@@ -220,7 +220,7 @@ export default function ProxyBridgeDashboard() {
                       )}
                     </div>
                   </ScrollArea>
-                  
+
                   <div className="flex gap-2">
                     <Input
                       value={inputMessage}
@@ -277,7 +277,7 @@ export default function ProxyBridgeDashboard() {
                     ))}
                   </CardContent>
                 </Card>
-                
+
                 <Card className="bg-slate-800/30 border-slate-700/50">
                   <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">

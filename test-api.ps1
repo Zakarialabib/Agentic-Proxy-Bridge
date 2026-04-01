@@ -113,7 +113,7 @@ Write-Host "5. Testing Chat Completions (/v1/chat/completions)..." -ForegroundCo
 
 if ($global:LmStudioConnected) {
     try {
-        $loadBody = @{ model = "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2" } | ConvertTo-Json
+        $loadBody = @{ model = "qwen3.5-4b" } | ConvertTo-Json
         $null = Invoke-WebRequest -Uri "$PROXY_BRIDGE/api/proxy/models/load" -Method Post -Headers @{ "Content-Type" = "application/json" } -Body $loadBody -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 3
     } catch { }
@@ -121,7 +121,7 @@ if ($global:LmStudioConnected) {
 
 try {
     $chatBody = @{
-        model = "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2"
+        model = "qwen3.5-4b"
         messages = @(@{ role = "user"; content = "Hi" })
     } | ConvertTo-Json
 
@@ -148,7 +148,7 @@ Write-Host "6. Testing Stateful Chat..." -ForegroundColor Yellow
 if ($global:LmStudioConnected) {
     try {
         $statefulBody = @{
-            model = "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2"
+            model = "qwen3.5-4b"
             input = "Hello"
             store = $true
         } | ConvertTo-Json
