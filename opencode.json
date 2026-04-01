@@ -44,14 +44,11 @@
         "embedding": {
           "name": "text-embedding-qwen3-embedding-4b"
         },
-        "embedding-nomic": {
-          "name": "text-embedding-nomic-embed-text-v1.5"
-        },
         "reranker-fast": {
           "name": "qwen3-reranker-0.6b"
         },
         "reranker-deep": {
-          "name": "qwen.qwen3-reranker-4b"
+          "name": "qwen3-reranker-4b"
         }
       }
     },

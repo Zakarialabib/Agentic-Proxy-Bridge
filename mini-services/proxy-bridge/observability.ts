@@ -213,6 +213,7 @@ interface LivingPreset {
 type RelationshipType = "dependency" | "substitution" | "conflict" | "synergy";
 
 interface ToolRelationship {
+  id?: string;
   tool_a: string;
   tool_b: string;
   type: RelationshipType;
@@ -1183,7 +1184,7 @@ export class ObservabilitySystem {
   /**
    * Record a failure and its remediation
    */
-  recordFailure(failure: Omit<FailureRecord, "id" | "detected_at" | "recurrence_count">, remediation: RemediationAction[]): FailureRecord {
+  recordFailure(failure: Omit<FailureRecord, "id" | "detected_at" | "recurrence_count" | "remediation">, remediation: RemediationAction[]): FailureRecord {
     // Check for similar existing failure
     const existingFailure = this.failures.find(f => 
       f.type === failure.type && 

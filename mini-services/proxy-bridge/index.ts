@@ -462,7 +462,7 @@ interface OrchestrationRequest {
 
 // Embedding Presets
 type EmbeddingPresetType = "code_search" | "doc_search" | "bug_search" | "test_search" | "refactor_target" | "semantic_diff" | "clustering" | "anomaly";
-type MRLDimension = 128 | 512 | 1024 | 1536;
+type MRLDimension = 128 | 512 | 1024 | 1536 | 2560;
 type RerankerMode = "fast" | "deep" | "cascade" | "hybrid";
 
 interface EmbeddingPreset {
@@ -618,12 +618,13 @@ const MRL_PRESETS = {
   flash: { dimension: 128 as MRLDimension, name: "Flash", speed: "Fastest", quality: "Basic", use_case: "Initial filtering" },
   standard: { dimension: 512 as MRLDimension, name: "Standard", speed: "Balanced", quality: "Good", use_case: "Default retrieval" },
   deep: { dimension: 1024 as MRLDimension, name: "Deep", speed: "Slower", quality: "High", use_case: "Precision critical" },
-  maximum: { dimension: 1536 as MRLDimension, name: "Maximum", speed: "Slowest", quality: "Best", use_case: "Reranking input" }
+  maximum: { dimension: 1536 as MRLDimension, name: "Maximum", speed: "Slowest", quality: "Best", use_case: "Reranking input" },
+  extreme: { dimension: 2560 as MRLDimension, name: "Extreme", speed: "Slowest", quality: "Best", use_case: "Qwen3 4B max capacity" }
 };
 
 const RERANKER_CONFIGS = {
-  fast: { model: "qwen3-rerank-0.6b", threshold: 0.8, latency_ms: 45, description: "Single pass, quick results" },
-  deep: { model: "qwen3-rerank-4b", threshold: 0.7, latency_ms: 5200, description: "Multi-pass, explanation generation" },
+  fast: { model: "qwen3-reranker-0.6b", threshold: 0.8, latency_ms: 45, description: "Single pass, quick results" },
+  deep: { model: "qwen3-reranker-4b", threshold: 0.7, latency_ms: 5200, description: "Multi-pass, explanation generation" },
   cascade: { model: "auto", threshold: 0.7, latency_ms: 0, description: "Fast first, escalate to Deep if needed" },
   hybrid: { model: "both", threshold: 0.75, latency_ms: 0, description: "0.6B filters top-20, 4B reranks top-5" }
 };
@@ -2096,10 +2097,18 @@ async function handleChatCompletions(req: Request): Promise<Response> {
     if (connected && kgMatches.nodes.length > 0) {
       try {
         const docTexts = kgMatches.nodes.map((n: any) => n.content);
-        const allTexts = [userContent, ...docTexts];
+        
+        // Apply instruction prefix based on intent for Qwen3-Embedding
+        let instruction = "Given a web search query, retrieve relevant passages that answer the query: ";
+        if (intent.intentType === 'rag_codebase') instruction = "Retrieve code implementing: ";
+        else if (intent.intentType === 'rag_docs') instruction = "Find documentation explaining: ";
+        else if (intent.intentType === 'rag_architecture') instruction = "Retrieve architecture documentation for: ";
+        
+        const queryWithInstruction = `${instruction}${userContent}`;
+        const allTexts = [queryWithInstruction, ...docTexts];
         
         // Batch embed user query + all docs via the coalescer
-        const embeddings = await embeddingCoalescer.getEmbeddings(allTexts, "text-embedding-nomic-embed-text-v1.5");
+        const embeddings = await embeddingCoalescer.getEmbeddings(allTexts, "text-embedding-qwen3-embedding-4b");
         
         if (embeddings && embeddings.length === allTexts.length) {
           const queryEmb = embeddings[0];
@@ -2451,11 +2460,21 @@ async function handleEmbeddings(req: Request): Promise<Response> {
   const body = await req.json();
   const { input, model } = body;
   
-  const modelKey = model || "text-embedding-nomic-embed-text-v1.5";
+  const modelKey = model || "text-embedding-qwen3-embedding-4b";
   const text = Array.isArray(input) ? input : [input];
   
   try {
-    const embeddings = await embeddingCoalescer.getEmbeddings(text, modelKey);
+    let embeddings = await embeddingCoalescer.getEmbeddings(text, modelKey);
+    
+    // Apply MRL Truncation and L2-Normalization if dimension is requested
+    const { dimensions } = body;
+    if (dimensions && typeof dimensions === 'number') {
+      embeddings = embeddings.map((e: number[]) => {
+        const truncated = e.slice(0, dimensions);
+        const norm = Math.sqrt(truncated.reduce((sum, val) => sum + val * val, 0));
+        return norm > 0 ? truncated.map(val => val / norm) : truncated;
+      });
+    }
     
     return Response.json({
       object: "list",

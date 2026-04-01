@@ -68,7 +68,7 @@ export async function handleCreateModelPreset(req: Request): Promise<Response> {
   const data = await req.json();
   
   try {
-    const preset = mgr.createModelPreset(data);
+    const preset = mgr.createModelPreset(data as any);
     return Response.json({ success: true, preset });
   } catch (e) {
     return Response.json({ error: String(e) }, { status: 400 });
@@ -149,10 +149,7 @@ export async function handleUpdateVRAMSettings(req: Request): Promise<Response> 
   const mgr = getSettingsManager();
   const updates = await req.json();
   
-  const updated = {
-    ...mgr.getVRAMSettings(),
-    ...updates
-  };
+  const updated = Object.assign({}, mgr.getVRAMSettings(), updates);
   
   mgr.updateSettings({ vram: updated });
   return Response.json({ success: true, settings: updated });

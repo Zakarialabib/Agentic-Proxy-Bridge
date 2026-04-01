@@ -12,7 +12,7 @@ describe('ContextWindowManager', () => {
     top_p: 0.9,
     top_k: 40,
     system_prompt: "You are a helpful assistant."
-  };
+  } as any;
 
   test('should estimate tokens correctly', () => {
     // 12 chars -> 12/4 = 3 tokens

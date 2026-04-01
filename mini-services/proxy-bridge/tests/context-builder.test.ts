@@ -11,7 +11,7 @@ describe('buildContext', () => {
     top_p: 0.9,
     top_k: 40,
     system_prompt: "You are a helpful assistant."
-  };
+  } as any;
 
   test('should normalize messages and rank docs', () => {
     const input: ContextBuildInput = {
