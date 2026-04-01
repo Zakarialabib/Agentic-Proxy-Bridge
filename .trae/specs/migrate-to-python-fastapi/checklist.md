@@ -1,0 +1,10 @@
+- [x] Python project initialized with required dependencies (`fastapi`, `uvloop`, `httpx`).
+- [x] Pydantic schemas accurately reflect the API contract (e.g., `AgentOrchestrateRequest`).
+- [x] `/v1/models` endpoint returns available models.
+- [x] Hierarchical connection pool successfully manages concurrent requests to LM Studio.
+- [x] `/v1/chat/completions` successfully streams chunks with backpressure handling.
+- [x] `/v1/embeddings` successfully deduplicates and batches concurrent requests.
+- [x] `/v1/agent/orchestrate` orchestrates tools and models using `asyncio.TaskGroup`.
+- [x] Prometheus metrics are exposed and accurately track pool utilization and batch sizes.
+- [x] Vite frontend runs on Port 3000 and successfully connects to the FastAPI backend.
+- [x] Multi-stage Dockerfile builds and runs the FastAPI application successfully.
