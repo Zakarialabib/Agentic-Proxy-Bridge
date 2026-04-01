@@ -1083,20 +1083,24 @@ export default function ProxyBridgeDashboard() {
     fetchObservabilityNegotiations()
     fetchObservabilityFailures()
     
+    let tick = 0
     const interval = setInterval(() => {
+      tick += 1
       fetchAsyncTasks()
       fetchGatewayLog()
-      setUptime(prev => prev + 1)
+      setUptime(prev => prev + 30)
       
-      // Update observability data periodically
       fetchObservabilityVRAM()
       fetchObservabilityHealth()
-      fetchObservabilityConfidence()
-      fetchObservabilityPresetsLineage()
-      fetchObservabilityNarrative()
-      fetchObservabilityNegotiations()
-      fetchObservabilityFailures()
-    }, 3000)
+
+      if (tick % 2 === 0) {
+        fetchObservabilityConfidence()
+        fetchObservabilityPresetsLineage()
+        fetchObservabilityNarrative()
+        fetchObservabilityNegotiations()
+        fetchObservabilityFailures()
+      }
+    }, 30_000)
     
     return () => clearInterval(interval)
   }, [fetchKnowledge, fetchMCPServers, fetchA2AAgents, fetchAsyncTasks, fetchEmbeddingPresets, fetchChatTestPresets, fetchGatewayLog, fetchObservabilityHorizon, fetchObservabilityVRAM, fetchObservabilityHealth, fetchObservabilityConfidence, fetchObservabilityPresetsLineage, fetchObservabilityNarrative, fetchObservabilityNegotiations, fetchObservabilityFailures])

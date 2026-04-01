@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
+import { CheckCircle2, AlertTriangle, XCircle, Minus } from 'lucide-react'
 import type { Tool } from '@/lib/types'
 
 interface ToolsPanelProps {
@@ -19,8 +20,6 @@ function SafetyBadge({ level }: { level: string }) {
 }
 
 function HealthIcon({ health }: { health: string }) {
-  const { CheckCircle2, AlertTriangle, XCircle, Minus } = require('lucide-react')
-  
   switch (health) {
     case 'healthy': return <CheckCircle2 className="w-4 h-4 text-emerald-400" />
     case 'degraded': return <AlertTriangle className="w-4 h-4 text-amber-400" />

@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
-import { Network, Bot, Wrench, Clock, Pause } from 'lucide-react'
+import { Network, Bot, Wrench, Clock, Pause, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
 import type { MCPServer, A2AAgent, AsyncTask } from '@/lib/types'
 
 interface ProtocolsPanelProps {
@@ -13,8 +13,6 @@ interface ProtocolsPanelProps {
 }
 
 function HealthBadge({ health }: { health: string }) {
-  const { CheckCircle2, AlertTriangle, XCircle, Minus } = require('lucide-react')
-  
   switch (health) {
     case 'healthy': return <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Healthy</Badge>
     case 'degraded': return <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Degraded</Badge>

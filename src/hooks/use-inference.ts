@@ -312,10 +312,6 @@ export function useEmbeddingPresets() {
   const [rerankerConfigs, setRerankerConfigs] = useState<Record<string, any>>({})
   const [isLoading, setIsLoading] = useState(true)
   
-  useEffect(() => {
-    loadPresets()
-  }, [])
-  
   const loadPresets = useCallback(async () => {
     setIsLoading(true)
     const data = await api.fetchEmbeddingPresets()
@@ -326,6 +322,10 @@ export function useEmbeddingPresets() {
     }
     setIsLoading(false)
   }, [])
+
+  useEffect(() => {
+    loadPresets()
+  }, [loadPresets])
   
   const applyPreset = useCallback((query: string, presetKey: string): GatewayTransformation | null => {
     const preset = presets[presetKey]

@@ -1,6 +1,7 @@
 // API Utilities - Centralized Proxy Bridge API Calls
 // Uses Bun's optimized fetch with connection pooling
 
+import { z } from 'zod'
 import type {
   ProxyStatus,
   Tool,
@@ -31,7 +32,11 @@ import type {
 
 const BASE_URL = '' // Use relative paths for Vite proxy
 
-async function fetchProxy<T>(endpoint: string, options?: RequestInit): Promise<T | null> {
+async function fetchProxy<T>(
+  endpoint: string,
+  options?: RequestInit,
+  schema?: z.ZodType<T>
+): Promise<T | null> {
   try {
     const res = await fetch(`${BASE_URL}${endpoint}`, {
       ...options,
@@ -40,9 +45,39 @@ async function fetchProxy<T>(endpoint: string, options?: RequestInit): Promise<T
         ...options?.headers,
       },
     })
-    if (!res.ok) return null
-    return await res.json()
+    if (!res.ok) {
+      let details: unknown = null
+      try {
+        details = await res.json()
+      } catch {
+        try {
+          details = await res.text()
+        } catch {
+          details = null
+        }
+      }
+      console.error(`[api] ${res.status} ${res.statusText} for ${endpoint}`, details)
+      return null
+    }
+
+    let json: unknown
+    try {
+      json = await res.json()
+    } catch (error) {
+      console.error(`[api] Failed to parse JSON for ${endpoint}`, error)
+      return null
+    }
+
+    if (!schema) return json as T
+
+    const parsed = schema.safeParse(json)
+    if (!parsed.success) {
+      console.error(`[api] Response schema validation failed for ${endpoint}`, parsed.error)
+      return null
+    }
+    return parsed.data
   } catch {
+    console.error(`[api] Network error for ${endpoint}`)
     return null
   }
 }
@@ -54,20 +89,79 @@ export async function fetchStatus(): Promise<ProxyStatus | null> {
 
 // Models
 export async function fetchAvailableModels(): Promise<ModelInfo[] | null> {
-  const data = await fetchProxy<{ data: any[] }>('/v1/models')
-  if (!data?.data) return null
-  
-  return data.data.map((m: any) => ({
+  const availableModelSchema = z.object({
+    modelKey: z.string(),
+    displayName: z.string(),
+    type: z.union([z.literal('llm'), z.literal('embedding')]),
+    format: z.string(),
+    sizeBytes: z.number(),
+    sizeGB: z.number(),
+    params: z.string().nullable(),
+    architecture: z.string().nullable(),
+    quantization: z.string().nullable(),
+    loaded: z.boolean(),
+  })
+
+  const modelsAvailableResponseSchema = z.object({
+    models: z.array(availableModelSchema),
+    connected: z.boolean().optional(),
+  })
+
+  const openAIModelsResponseSchema = z.object({
+    data: z.array(
+      z.object({
+        id: z.string(),
+      })
+    ),
+  })
+
+  const modelsWithMetadata = await fetchProxy('/models/available', undefined, modelsAvailableResponseSchema)
+  if (modelsWithMetadata?.models) {
+    return modelsWithMetadata.models.map((m) => ({
+      modelKey: m.modelKey,
+      displayName: m.displayName,
+      type: m.type,
+      format: m.format,
+      sizeBytes: m.sizeBytes,
+      sizeGB: m.sizeGB,
+      params: m.params,
+      architecture: m.architecture,
+      quantization: m.quantization,
+      loaded: m.loaded,
+      id: m.modelKey,
+      name: m.displayName,
+      vram: m.sizeGB,
+      contextLength: m.type === 'llm' ? 8192 : 0,
+      capabilities: m.type === 'llm' ? ['chat', 'reasoning'] : ['embedding'],
+      tps: m.type === 'llm' ? 30 : 0,
+      ttft: m.type === 'llm' ? 150 : 0,
+      bestFor:
+        m.type === 'embedding'
+          ? 'Embeddings, semantic search'
+          : m.params
+            ? `${m.params} model`
+            : 'General chat',
+    }))
+  }
+
+  const openAIModels = await fetchProxy('/v1/models', undefined, openAIModelsResponseSchema)
+  if (!openAIModels?.data) return null
+
+  console.error(
+    `[api] /models/available did not return model metadata; falling back to /v1/models (limited model info only)`
+  )
+
+  return openAIModels.data.map((m) => ({
     modelKey: m.id,
     displayName: m.id.split('/').pop() || m.id,
     type: m.id.includes('embedding') ? 'embedding' : 'llm',
     format: 'GGUF',
     sizeBytes: 0,
     sizeGB: 0,
-    params: '',
-    architecture: '',
-    quantization: '',
-    loaded: true,
+    params: null,
+    architecture: null,
+    quantization: null,
+    loaded: false,
     id: m.id,
     name: m.id.split('/').pop() || m.id,
     vram: 0,
