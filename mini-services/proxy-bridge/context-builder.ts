@@ -1,3 +1,6 @@
+import { ModelPreset } from "./settings";
+import { ContextWindowManager } from "./services/context-window-manager";
+
 export interface OpenAIMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
@@ -15,16 +18,17 @@ export interface ContextBuildInput {
   messages: OpenAIMessage[];
   docs: ContextDocument[];
   maxContextChars?: number;
+  preset?: ModelPreset;
 }
 
 export interface ContextBuildOutput {
   normalizedMessages: OpenAIMessage[];
   retrievalContext: string;
   budgetedContext: string;
+  totalTokens: number;
 }
 
 export function buildContext(input: ContextBuildInput): ContextBuildOutput {
-  const maxContextChars = input.maxContextChars ?? 6000;
   const normalizedMessages = input.messages
     .filter((m) => typeof m.content === "string" && m.content.trim().length > 0)
     .map((m) => ({
@@ -33,21 +37,24 @@ export function buildContext(input: ContextBuildInput): ContextBuildOutput {
     }));
 
   const rankedDocs = [...input.docs]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8);
+    .sort((a, b) => b.score - a.score);
+
+  const { optimizedMessages, optimizedDocs, totalTokens, budgetedContextStr } = ContextWindowManager.optimizeContext(
+    normalizedMessages,
+    rankedDocs,
+    input.preset,
+    input.maxContextChars
+  );
 
   const retrievalContext = rankedDocs
+    .slice(0, 8)
     .map((doc) => `[${doc.source}] ${doc.content}`)
     .join("\n\n");
 
-  const budgetedContext =
-    retrievalContext.length > maxContextChars
-      ? retrievalContext.slice(0, maxContextChars)
-      : retrievalContext;
-
   return {
-    normalizedMessages,
+    normalizedMessages: optimizedMessages,
     retrievalContext,
-    budgetedContext,
+    budgetedContext: budgetedContextStr,
+    totalTokens
   };
 }

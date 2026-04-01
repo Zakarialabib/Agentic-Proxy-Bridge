@@ -9,6 +9,8 @@ export { SessionOrchestratorImpl } from './session-orchestrator'
 export { KnowledgeIntegratorImpl } from './knowledge-integrator'
 export { PreTriggeringEngineImpl } from './pre-triggering-engine'
 export { PerformanceAdvisor, getPerformanceAdvisor, initializePerformanceAdvisor } from './performance-advisor'
+export { IntentPipeline, intentPipeline } from './intent-pipeline'
+export type { IntentAnalysis } from './intent-pipeline'
 
 export type {
   ContextOrchestrator,
