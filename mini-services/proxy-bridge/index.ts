@@ -131,6 +131,8 @@ import { initializePrometheusMetrics, getPrometheusMetrics } from "./services/pr
 import { initializePerformanceDashboard, getPerformanceDashboard } from "./services/performance-dashboard";
 import { initializeConfigTuner, getConfigTuner } from "./services/config-tuner";
 import { initializePerformanceAdvisor, getPerformanceAdvisor } from "./services/performance-advisor";
+import { toolOrchestrator } from "./services/tool-orchestrator";
+import { intentPipeline } from "./services/intent-pipeline";
 
 async function* streamFromResponse(response: Response): AsyncGenerator<Uint8Array> {
   const reader = response.body!.getReader();
@@ -142,6 +144,160 @@ async function* streamFromResponse(response: Response): AsyncGenerator<Uint8Arra
     }
   } finally {
     reader.releaseLock();
+  }
+}
+
+async function* interceptAndExecuteTools(
+  initialResponse: Response,
+  lmStudioRequest: any,
+  lmStudioUrl: string,
+  model: string,
+  messages: any[]
+): AsyncGenerator<Uint8Array> {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let currentResponse = initialResponse;
+  let currentMessages = [...messages];
+
+  while (true) {
+    const stream = streamFromResponse(currentResponse);
+    let isToolCallMode = false;
+    let toolCallBuffer = "";
+    let buffer = "";
+
+    for await (const chunk of stream) {
+      const text = decoder.decode(chunk, { stream: true });
+      buffer += text;
+
+      let lines = buffer.split('\n');
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) {
+          if (!isToolCallMode && line.trim() !== "") {
+            yield encoder.encode(`${line}\n`);
+          }
+          continue;
+        }
+
+        if (line.trim() === "data: [DONE]") {
+          if (!isToolCallMode) {
+            yield encoder.encode(`${line}\n\n`);
+          }
+          continue;
+        }
+
+        const dataStr = line.substring(6);
+        try {
+          const data = JSON.parse(dataStr);
+          
+          // LM Studio /api/v1/chat or /v1/chat/completions format parsing
+          let content = "";
+          if (data.choices && data.choices[0]?.delta?.content) {
+            content = data.choices[0].delta.content;
+          } else if (data.output && Array.isArray(data.output)) {
+            const msgPart = data.output.find((o: any) => o.type === "message");
+            if (msgPart && msgPart.content) {
+              content = msgPart.content;
+            } else if (data.output[0]?.content) {
+              content = data.output[0].content;
+            }
+          }
+
+          if (content) {
+            if (content.includes("<tool_call>") || toolCallBuffer.includes("<tool_call>")) {
+              isToolCallMode = true;
+            }
+
+            if (isToolCallMode) {
+              toolCallBuffer += content;
+            } else {
+              yield encoder.encode(`${line}\n\n`);
+            }
+          } else {
+            if (!isToolCallMode) {
+              yield encoder.encode(`${line}\n\n`);
+            }
+          }
+        } catch (e) {
+          if (!isToolCallMode) {
+            yield encoder.encode(`${line}\n\n`);
+          }
+        }
+      }
+    }
+
+    if (isToolCallMode) {
+      // Find JSON within <tool_call> tags or just parse the whole buffer if it's JSON
+      const match = toolCallBuffer.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+      let toolData = null;
+      let toolCallContent = "";
+      
+      if (match) {
+        try {
+          toolData = JSON.parse(match[1]);
+          toolCallContent = match[0];
+        } catch (e) {}
+      } else {
+        try {
+          toolData = JSON.parse(toolCallBuffer.trim());
+          toolCallContent = toolCallBuffer.trim();
+        } catch (e) {}
+      }
+
+      if (toolData && toolData.name) {
+        try {
+          const args = toolData.arguments || toolData.parameters || {};
+          const result = await toolOrchestrator.executeTool(
+            uuidv4(),
+            toolData.name,
+            args
+          );
+
+          currentMessages.push({
+            role: "assistant",
+            content: toolCallContent
+          });
+          currentMessages.push({
+            role: "user", // LM Studio expects user role for tool results usually, or "tool" if supported
+            content: `<tool_response>\n{"name": "${toolData.name}", "content": ${JSON.stringify(result.content)}}\n</tool_response>`
+          });
+
+          // Follow-up request
+          const input = toLMStudioInput(currentMessages);
+          const followUpRequest = {
+            ...lmStudioRequest,
+            input: input
+          };
+
+          const newResponse = await fetch(`${lmStudioUrl}/api/v1/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(followUpRequest)
+          });
+
+          if (!newResponse.ok) {
+            const errStr = `data: {"error": "LM Studio follow-up failed"}\n\n`;
+            yield encoder.encode(errStr);
+            break;
+          }
+
+          currentResponse = newResponse;
+          continue; // Restart the loop with the new response
+        } catch (err: any) {
+          const errStr = `data: {"error": "Tool execution failed: ${err.message}"}\n\n`;
+          yield encoder.encode(errStr);
+          break;
+        }
+      } else {
+        // Failed to parse tool call, just yield what we had
+        yield encoder.encode(`data: {"error": "Failed to parse tool call"}\n\n`);
+        break;
+      }
+    } else {
+      // Normal completion
+      break;
+    }
   }
 }
 
@@ -1922,17 +2078,70 @@ async function handleChatCompletions(req: Request): Promise<Response> {
   const body = await req.json();
   const { model, messages, stream, tools, temperature, max_tokens, session_id } = body;
   const lastUserMessage = [...(messages ?? [])].reverse().find((m: any) => m.role === "user");
-  const kgMatches = queryKnowledgeGraph(lastUserMessage?.content ?? "", 1);
+  const userContent = lastUserMessage?.content ?? "";
+  
+  // 1. Analyze intent
+  const intent = intentPipeline.analyze(userContent);
+  let kgMatches: { nodes: any[]; confidence?: number; paths?: any[] } = { nodes: [] };
+  
+  // 2. Conditional RAG flow based on intent
+  if (intent.requiresRAG) {
+    console.log(`[IntentPipeline] RAG intent detected: ${intent.intentType} (confidence: ${intent.confidence})`);
+    
+    // Fetch deeper context (2 hops) for RAG queries
+    kgMatches = queryKnowledgeGraph(userContent, 2);
+    
+    // Use embedding coalescer for semantic reranking if LM Studio is connected
+    const connected = await ensureClient();
+    if (connected && kgMatches.nodes.length > 0) {
+      try {
+        const docTexts = kgMatches.nodes.map((n: any) => n.content);
+        const allTexts = [userContent, ...docTexts];
+        
+        // Batch embed user query + all docs via the coalescer
+        const embeddings = await embeddingCoalescer.getEmbeddings(allTexts, "text-embedding-nomic-embed-text-v1.5");
+        
+        if (embeddings && embeddings.length === allTexts.length) {
+          const queryEmb = embeddings[0];
+          const docEmbeddings = embeddings.slice(1);
+          
+          // Score and rerank
+          const scoredNodes = kgMatches.nodes.map((node: any, i: number) => ({
+            ...node,
+            similarity: cosineSimilarity(queryEmb, docEmbeddings[i])
+          }));
+          
+          // Sort descending by similarity
+          scoredNodes.sort((a, b) => b.similarity - a.similarity);
+          
+          // Keep only relevant nodes
+          kgMatches.nodes = scoredNodes.filter(n => n.similarity > 0.4);
+          console.log(`[IntentPipeline] Reranked and kept ${kgMatches.nodes.length} highly relevant nodes`);
+        }
+      } catch (e) {
+        console.warn(`[IntentPipeline] Semantic reranking failed, falling back to basic KG results:`, e);
+      }
+    }
+  } else {
+    // Default lightweight retrieval
+    kgMatches = queryKnowledgeGraph(userContent, 1);
+  }
+  
+  const settingsManager = getSettingsManager();
+  const presets = settingsManager.getModelPresets();
+  const preset = presets.find(p => p.model_key === model || p.name === model) || settingsManager.getDefaultModelPreset();
+
   const context = buildContext({
-    prompt: lastUserMessage?.content ?? "",
+    prompt: userContent,
     messages: (messages ?? []).map((m: any) => ({ role: m.role, content: m.content ?? "" })),
     docs: kgMatches.nodes.slice(0, 5).map((n) => ({
       id: n.id,
       content: n.content,
-      score: Math.min(1, n.access_count / 10),
+      score: Math.min(1, (n.similarity ?? (n.access_count / 10))),
       source: n.source_doc_id
     })),
-    maxContextChars: 4000
+    maxContextChars: 4000,
+    preset: preset
   });
   
   // Check if LM Studio is available - use native API for better reliability
@@ -1992,12 +2201,21 @@ async function handleNativeChatCompletions(
         return Response.json({ error: errorData.error || "LM Studio streaming error" }, { status: lmStudioResponse.status });
       }
 
-      return createStreamingResponse(streamFromResponse(lmStudioResponse), {
-        chunkSize: 4096,
-        flushInterval: 16,
-        highWaterMark: 64 * 1024,
-        lowWaterMark: 16 * 1024
-      });
+      return createStreamingResponse(
+        interceptAndExecuteTools(
+          lmStudioResponse,
+          lmStudioRequest,
+          lmStudioUrl,
+          model,
+          messages
+        ),
+        {
+          chunkSize: 4096,
+          flushInterval: 16,
+          highWaterMark: 64 * 1024,
+          lowWaterMark: 16 * 1024
+        }
+      );
     }
     
     const lmStudioResponse = await connectionPool.execute(async () => {
@@ -2292,22 +2510,27 @@ async function handleRerank(req: Request): Promise<Response> {
   try {
     const startTime = Date.now();
     
-    // Get embedding for query
-    const queryEmb = await currentEmbeddingModel!.embed(query);
-    
-    // Get embeddings for all documents
-    const docEmbeddings = await Promise.all(
-      documents.slice(0, 20).map(async (doc: string | { text?: string; content?: string }) => {
-        const docText = typeof doc === 'string' ? doc : (doc.text || doc.content || '');
-        const docEmb = await currentEmbeddingModel!.embed(docText);
-        return { text: docText, embedding: docEmb.embedding };
-      })
+    // Extract all texts to embed
+    const queryText = query;
+    const docTexts = documents.slice(0, 20).map((doc: string | { text?: string; content?: string }) => 
+      typeof doc === 'string' ? doc : (doc.text || doc.content || '')
     );
+    const allTexts = [queryText, ...docTexts];
+    
+    // Get embeddings for query and documents in one batch via coalescer
+    const embeddings = await embeddingCoalescer.getEmbeddings(allTexts, modelKey);
+    
+    if (!embeddings || embeddings.length !== allTexts.length) {
+      throw new Error("Failed to get embeddings for all documents");
+    }
+    
+    const queryEmb = embeddings[0];
+    const docEmbeddings = embeddings.slice(1);
     
     // Calculate cosine similarities
-    const results = docEmbeddings.map(({ text, embedding }) => {
-      const similarity = cosineSimilarity(queryEmb.embedding, embedding);
-      return { text, score: similarity };
+    const results = docEmbeddings.map((embedding, i) => {
+      const similarity = cosineSimilarity(queryEmb, embedding);
+      return { text: docTexts[i], score: similarity };
     });
     
     // Sort by score descending
@@ -3286,7 +3509,8 @@ const embeddingCoalescer = initializeEmbeddingCoalescer(
   async (texts, model) => {
     return await connectionPool.execute(
       async () => {
-        const res = await fetch('http://localhost:1234/v1/embeddings', {
+        const settings = getSettingsManager().getLMStudioConnection();
+        const res = await fetch(`http://${settings.host}:${settings.port}/v1/embeddings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ input: texts, model }),

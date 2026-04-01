@@ -124,7 +124,7 @@ export function ConnectionMatrix({ status }: ConnectionMatrixProps) {
             )}
           </div>
           <div className="text-xs font-mono text-slate-300 bg-slate-800 px-2 py-1 rounded">
-            http://localhost:1234
+            http://192.168.1.12:1234
           </div>
         </div>
         

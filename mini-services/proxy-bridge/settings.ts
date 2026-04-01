@@ -90,7 +90,7 @@ export interface AppSettings {
 
 const DEFAULT_SETTINGS: AppSettings = {
   lm_studio: {
-    host: "127.0.0.1",
+    host: "192.168.1.12",
     port: 1234,
     auto_connect: true,
     retry_interval_ms: 5000,

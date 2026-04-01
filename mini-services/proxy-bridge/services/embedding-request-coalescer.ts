@@ -11,6 +11,8 @@ export interface EmbeddingRequest {
   texts: string[]
   model: string
   timestamp: number
+  resolve: (embeddings: number[][]) => void
+  reject: (error: Error) => void
 }
 
 export interface CoalesceConfig {
@@ -60,33 +62,27 @@ export class EmbeddingRequestCoalescer extends EventEmitter {
     }
 
     const requestId = `emb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    const request: EmbeddingRequest = {
-      id: requestId,
-      texts,
-      model,
-      timestamp: Date.now(),
-    }
+    return new Promise((resolve, reject) => {
+      const request: EmbeddingRequest = {
+        id: requestId,
+        texts,
+        model,
+        timestamp: Date.now(),
+        resolve,
+        reject
+      }
 
-    this.pendingRequests.get(modelKey)!.push(request)
-    this.processedHashes.set(requestHash, Date.now())
+      this.pendingRequests.get(modelKey)!.push(request)
+      this.processedHashes.set(requestHash, Date.now())
 
-    this.emit('coalesced', {
-      requestId,
-      textCount: texts.length,
-      model,
-      queueSize: this.getPendingCount(modelKey),
-    })
+      this.emit('coalesced', {
+        requestId,
+        textCount: texts.length,
+        model,
+        queueSize: this.getPendingCount(modelKey),
+      })
 
-    this.scheduleBatch(modelKey)
-
-    return new Promise((resolve) => {
-      const checkInterval = setInterval(() => {
-        const pending = this.pendingRequests.get(modelKey)
-        if (!pending || !pending.find((r) => r.id === requestId)) {
-          clearInterval(checkInterval)
-          resolve([])
-        }
-      }, 10)
+      this.scheduleBatch(modelKey)
     })
   }
 
@@ -123,10 +119,10 @@ export class EmbeddingRequestCoalescer extends EventEmitter {
 
     this.activeBatches++
 
-    try {
-      const batch = requests.splice(0, this.config.batchSize)
-      const allTexts = batch.flatMap((r) => r.texts)
+    const batch = requests.splice(0, this.config.batchSize)
+    const allTexts = batch.flatMap((r) => r.texts)
 
+    try {
       this.emit('processingBatch', {
         model: modelKey,
         batchSize: batch.length,
@@ -135,6 +131,14 @@ export class EmbeddingRequestCoalescer extends EventEmitter {
       })
 
       const embeddings = await this.executeEmbedding(allTexts, modelKey)
+
+      // Distribute results back to original requests
+      let offset = 0
+      for (const req of batch) {
+        const reqLen = req.texts.length
+        req.resolve(embeddings.slice(offset, offset + reqLen))
+        offset += reqLen
+      }
 
       this.emit('batchCompleted', {
         model: modelKey,
@@ -147,9 +151,13 @@ export class EmbeddingRequestCoalescer extends EventEmitter {
         setImmediate(() => this.processBatch(modelKey))
       }
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error))
+      for (const req of batch) {
+        req.reject(err)
+      }
       this.emit('batchError', {
         model: modelKey,
-        error: error instanceof Error ? error.message : String(error),
+        error: err.message,
       })
     } finally {
       this.activeBatches--

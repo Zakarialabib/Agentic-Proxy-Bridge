@@ -1,0 +1,3 @@
+- [x] Context Window Manager correctly truncates conversation history based on token limits while preserving RAG context.
+- [x] Tool Interceptor successfully catches `<tool_call>` tags from the stream, executes the local tool, and re-prompts LM Studio.
+- [x] RAG Intent Pipeline correctly identifies queries needing context and fetches it using the `EmbeddingRequestCoalescer` before querying the LLM.
