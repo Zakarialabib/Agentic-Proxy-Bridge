@@ -55,18 +55,22 @@ export function useStatefulChat(): UseStatefulChatReturn {
       abortControllerRef.current = new AbortController()
 
       try {
-        // Build request body for stateful chat endpoint
+        // Build request body for standard chat completion
+        const requestMessages = [
+          ...messages.map(m => ({ role: m.role, content: m.content })),
+          { role: 'user', content: input.trim() }
+        ];
+
         const requestBody = {
           model: options?.model || currentModel,
-          input: input.trim(),
-          store: options?.store !== false,
-          ...(responseId && { previous_response_id: responseId }),
+          messages: requestMessages,
+          stream: false,
           ...(options?.temperature !== undefined && { temperature: options.temperature }),
           ...(options?.maxTokens !== undefined && { max_tokens: options.maxTokens }),
         }
 
-        // Call stateful chat endpoint
-        const response = await fetch(`${PROXY_BRIDGE_URL}/chat/stateful`, {
+        // Call standard chat completions endpoint via proxy
+        const response = await fetch(`${PROXY_BRIDGE_URL}/v1/chat/completions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -82,9 +86,9 @@ export function useStatefulChat(): UseStatefulChatReturn {
 
         const data = await response.json()
 
-        // Extract assistant response from LM Studio output
-        const assistantMessage = data.output?.[0]?.content || 'No response'
-        const newResponseId = data.response_id
+        // Extract assistant response from OpenAI format output
+        const assistantMessage = data.choices?.[0]?.message?.content || data.output?.[0]?.content || 'No response'
+        const newResponseId = data.id || data.response_id || Date.now().toString()
 
         // Update state: add user message
         setMessages((prev) => [

@@ -264,13 +264,12 @@ async function* interceptAndExecuteTools(
           });
 
           // Follow-up request
-          const input = toLMStudioInput(currentMessages);
           const followUpRequest = {
             ...lmStudioRequest,
-            input: input
+            messages: currentMessages
           };
 
-          const newResponse = await fetch(`${lmStudioUrl}/api/v1/chat`, {
+          const newResponse = await fetch(`${lmStudioUrl}/v1/chat/completions`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(followUpRequest)
@@ -838,7 +837,7 @@ function getSessionAdjustments(session: SessionState): SessionAdjustments {
 let client: LMStudioClient | null = null;
 let currentLLM: LLM | null = null;
 let currentEmbeddingModel: EmbeddingModel | null = null;
-let lmStudioConnected = false;
+let lmStudioConnected: boolean | null = null;
 
 function initializeClient(): void {
   // Don't initialize client on startup - delay until first use
@@ -847,9 +846,18 @@ function initializeClient(): void {
   console.log("[LMStudio] Running in standalone mode - Knowledge Graph, MCP/A2A protocols functional");
 }
 
+let lastConnectionAttempt = 0;
+
 async function ensureClient(): Promise<boolean> {
   if (client) return true;
-  if (lmStudioConnected === false) return false;
+  
+  // Don't retry more than once every 10 seconds
+  const now = Date.now();
+  if (lmStudioConnected === false && (now - lastConnectionAttempt) < 10000) {
+    return false;
+  }
+  
+  lastConnectionAttempt = now;
   
   try {
     const settings = getSettingsManager().getLMStudioConnection();
@@ -859,7 +867,7 @@ async function ensureClient(): Promise<boolean> {
     console.log(`[LMStudio] Client initialized - connected to ${baseUrl}`);
     return true;
   } catch (e) {
-    console.log("[LMStudio] LM Studio not available");
+    console.log("[LMStudio] LM Studio not available:", e);
     lmStudioConnected = false;
     return false;
   }
@@ -2158,14 +2166,19 @@ async function handleNativeChatCompletions(
     
     const lmStudioRequest: any = {
       model,
-      input: promptWithContext
+      messages: [
+        ...(retrievalContext ? [{ role: "system", content: `Context:\n${retrievalContext}` }] : []),
+        ...messages
+      ]
     };
     
     if (temperature !== undefined) lmStudioRequest.temperature = temperature;
+    if (max_tokens !== undefined) lmStudioRequest.max_tokens = max_tokens;
     
     if (stream) {
+      lmStudioRequest.stream = true;
       const lmStudioResponse = await connectionPool.execute(async () => {
-        return await fetch(`${lmStudioUrl}/api/v1/chat`, {
+        return await fetch(`${lmStudioUrl}/v1/chat/completions`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(lmStudioRequest)
@@ -2173,8 +2186,8 @@ async function handleNativeChatCompletions(
       }, 'high');
 
       if (!lmStudioResponse.ok) {
-        const errorData = await lmStudioResponse.json();
-        return Response.json({ error: errorData.error || "LM Studio streaming error" }, { status: lmStudioResponse.status });
+        const errorText = await lmStudioResponse.text();
+        return Response.json({ error: errorText || "LM Studio streaming error" }, { status: lmStudioResponse.status });
       }
 
       return createStreamingResponse(
@@ -2195,7 +2208,7 @@ async function handleNativeChatCompletions(
     }
     
     const lmStudioResponse = await connectionPool.execute(async () => {
-      return await fetch(`${lmStudioUrl}/api/v1/chat`, {
+      return await fetch(`${lmStudioUrl}/v1/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(lmStudioRequest)
@@ -2203,28 +2216,12 @@ async function handleNativeChatCompletions(
     }, 'high');
     
     if (!lmStudioResponse.ok) {
-      const errorData = await lmStudioResponse.json();
-      return Response.json({ error: errorData.error || "LM Studio error" }, { status: lmStudioResponse.status });
+      const errorText = await lmStudioResponse.text();
+      return Response.json({ error: errorText || "LM Studio error" }, { status: lmStudioResponse.status });
     }
     
     const lmStudioData = await lmStudioResponse.json();
-    
-    const outputMessages = lmStudioData.output || [];
-    const messagePart = outputMessages.find((o: any) => o.type === "message");
-    const reasoningPart = outputMessages.find((o: any) => o.type === "reasoning");
-    const content = (reasoningPart?.content ? reasoningPart.content + "\n\n" : "") + (messagePart?.content || "");
-    
-    // Convert to OpenAI format
-    const response = toOpenAIChatResponse({
-      id: `chatcmpl-${uuidv4().replace(/-/g, "").substring(0, 24)}`,
-      model,
-      content,
-      finishReason: "stop",
-      promptTokens: lmStudioData.stats?.input_tokens || 0,
-      completionTokens: lmStudioData.stats?.total_output_tokens || 0
-    });
-    
-    return Response.json(response);
+    return Response.json(lmStudioData);
   } catch (e) {
     console.error("[NativeChat] Error:", e);
     return Response.json({ error: `Chat failed: ${String(e)}` }, { status: 500 });
@@ -2565,17 +2562,13 @@ async function handleStatefulChat(req: Request): Promise<Response> {
     const settings = getSettingsManager().getLMStudioConnection();
     const lmStudioUrl = `http://${settings.host}:${settings.port}`;
 
-    // Build request body for LM Studio native API
+    // Build request body for LM Studio native API (using OpenAI standard)
     const lmStudioRequest: any = {
       model,
-      input,
-      store
+      messages: [{ role: "user", content: input }]
     };
 
     // Add optional parameters
-    if (previous_response_id) {
-      lmStudioRequest.previous_response_id = previous_response_id;
-    }
     if (temperature !== undefined) {
       lmStudioRequest.temperature = temperature;
     }
@@ -2583,9 +2576,9 @@ async function handleStatefulChat(req: Request): Promise<Response> {
       lmStudioRequest.max_tokens = max_tokens;
     }
 
-    // Make request to LM Studio native API
+    // Make request to LM Studio
     const lmStudioResponse = await connectionPool.execute(async () => {
-      return await fetch(`${lmStudioUrl}/api/v1/chat`, {
+      return await fetch(`${lmStudioUrl}/v1/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(lmStudioRequest)
@@ -2613,14 +2606,14 @@ async function handleStatefulChat(req: Request): Promise<Response> {
     // Parse response from LM Studio
     const lmStudioData = await lmStudioResponse.json();
 
-    // Extract response_id for session chaining
-    const response_id = lmStudioData.response_id || `sess_${uuidv4().replace(/-/g, '').substring(0, 24)}`;
+    // Extract response_id for session chaining (OpenAI standard)
+    const response_id = lmStudioData.id || `sess_${uuidv4().replace(/-/g, '').substring(0, 24)}`;
 
     // Simplify response for frontend
     const response = {
       response_id,
-      model_instance_id: lmStudioData.model_instance_id || model,
-      output: lmStudioData.output || [],
+      model_instance_id: lmStudioData.model || model,
+      output: [{ content: lmStudioData.choices?.[0]?.message?.content || "" }],
       store: store
     };
 
