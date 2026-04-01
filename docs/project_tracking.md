@@ -207,6 +207,20 @@ To build this robust bridge, the system needs the following "skills":
 - [ ] **Tool Interceptor Middleware**: Implement a stream parser in `index.ts` that catches `<tool_call>` tags, executes the tool, and automatically issues a follow-up request to LM Studio.
 - [ ] **RAG Intent Pipeline**: Connect the `EmbeddingRequestCoalescer` to the user's chat input so that relevant workspace context is fetched and injected before the LLM is queried.
 
+---
+
+## Phase 9: Python & Vite Migration (Current)
+
+**Goal:** Decouple frontend/backend and move to a more standard, scalable stack using FastAPI (Python) and Vite (React).
+
+### Tasks
+- [ ] **FastAPI Backend Setup**: Initialize FastAPI with uvloop and connection pooling.
+- [ ] **Database Migration**: Move from Prisma/SQLite to SQLModel/aiosqlite.
+- [ ] **Agentic Logic Port**: Migrate SSE streaming and tool interception from Bun to Python.
+- [ ] **Vite Frontend Setup**: Configure Vite with React 19 and Tailwind 4.
+- [ ] **Component Migration**: Port Next.js components to standard React components.
+- [ ] **End-to-End Testing**: Verify streaming and tool calls in the new stack.
+
 
 # --- Source: WORKLOG.md ---
 

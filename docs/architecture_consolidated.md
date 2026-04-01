@@ -8,8 +8,8 @@ Building Next-Generation AI Agent Systems
 
 ────────────────────────────────────────────────────────────
 
-LM Studio + Qwen3 \| Embeddings \| Reranking
-
+LM Studio + Qwen3 | Embeddings | Reranking | FastAPI | Vite
+| April 2026
 *Inspired by Qwen-Agent & qwen-code*
 
 March 2026
@@ -59,7 +59,10 @@ is **one component** in a larger cognitive architecture, not the entire
 system itself. Memory, planning, tool use, sandboxing, and safety layers
 work together to produce behavior that is qualitatively more capable
 than a raw model API call. A proxy system should bridge LM Studio to
-orchestrate this full cognitive stack.
+orchestrate this full cognitive stack. In April 2026, this system migrated 
+from Bun to Python (FastAPI) to leverage Python's superior async ecosystem 
+for streaming and I/O-heavy agentic workloads.
+
 
 This document provides a comprehensive technology evaluation and
 implementation roadmap for building a production-grade agent system on
@@ -791,18 +794,6 @@ consumer hardware without cloud dependencies.
 
 # --- Source: PROS_CONS.md ---
 
-# LMStudio Proxy Bridge - Architectural Pros & Cons Analysis
-
-## Core Architectural Decisions
-
-### 1. Mini-Service Architecture (Separate Port 3001)
-
-**Decision**: Run the proxy bridge as a separate service on port 3001, distinct from the Next.js frontend on port 3000.
-
-#### Pros ✅
-- **Independent Scaling**: Can scale proxy and frontend independently
-- **Fault Isolation**: Frontend crashes don't affect proxy, and vice versa
-- **Technology Flexibility**: Proxy can use Bun-specific features without Next.js constraints
 - **Clear Separation**: API layer is distinct from presentation layer
 - **Easier Testing**: Can test proxy independently with curl/Postman
 - **Deployment Options**: Can deploy to different servers if needed

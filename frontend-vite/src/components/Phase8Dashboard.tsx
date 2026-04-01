@@ -1,4 +1,4 @@
-'use client'
+
 
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -576,7 +576,7 @@ export function Phase8Dashboard() {
   const { data, isLoading, error, refetch } = useQuery<DashboardMetrics>({
     queryKey: ['dashboard'],
     queryFn: async () => {
-      const res = await fetch(`/api/proxy/dashboard?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/dashboard`)
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error || 'Failed to fetch dashboard')

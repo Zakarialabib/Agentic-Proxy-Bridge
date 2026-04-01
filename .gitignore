@@ -1,3 +1,4 @@
 .next/ 
 .oepncode/
 node_modules/
+*.pyc

@@ -1,4 +1,4 @@
-'use client'
+
 
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
@@ -717,7 +717,7 @@ export default function ProxyBridgeDashboard() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/settings?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/settings`)
       if (res.ok) {
         const data = await res.json()
         setLmStudioHost(data.lm_studio?.host || '192.168.1.12')
@@ -760,7 +760,7 @@ export default function ProxyBridgeDashboard() {
           pre_warm: preWarmModels
         }
       }
-      const res = await fetch(`/api/proxy/settings?XTransformPort=${PROXY_PORT}`, {
+      const res = await fetch(`/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
@@ -777,7 +777,7 @@ export default function ProxyBridgeDashboard() {
   // Fetch model presets
   const fetchModelPresets = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/settings/presets?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/settings/presets`)
       if (res.ok) {
         const data = await res.json()
         setModelPresets(data.presets || [])
@@ -827,7 +827,7 @@ export default function ProxyBridgeDashboard() {
   // Fetch functions
   const fetchKnowledge = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/knowledge?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/knowledge`)
       if (res.ok) {
         const data = await res.json()
         setKnowledgeNodes(data.nodes || [])
@@ -851,7 +851,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchMCPServers = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/mcp/servers?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/mcp/servers`)
       if (res.ok) {
         const data = await res.json()
         setMcpServers(data.servers)
@@ -863,7 +863,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchA2AAgents = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/a2a/agents?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/a2a/agents`)
       if (res.ok) {
         const data = await res.json()
         setA2aAgents(data.agents)
@@ -875,7 +875,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchAsyncTasks = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/async/tasks?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/async/tasks`)
       if (res.ok) {
         const data = await res.json()
         setAsyncTasks(data.tasks)
@@ -887,7 +887,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchEmbeddingPresets = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/presets/embedding?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/presets/embedding`)
       if (res.ok) {
         const data = await res.json()
         setEmbeddingPresets(data.presets || {})
@@ -901,7 +901,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchChatTestPresets = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/presets/chat-tests?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/presets/chat-tests`)
       if (res.ok) {
         const data = await res.json()
         setChatTestPresets(data.presets || [])
@@ -913,7 +913,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchGatewayLog = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/gateway/log?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/gateway/log`)
       if (res.ok) {
         const data = await res.json()
         setGatewayLog(data.transformations || [])
@@ -925,7 +925,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityHorizon = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/horizon?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/horizon`)
       if (res.ok) {
         const data = await res.json()
         setThreeTimeHorizon(data || { now: { alerts: [], sparklines: [], hot_channels: [] }, recent: { trends: [], patterns: [], hints: [] }, deep: { evolution: [], preset_tree: [], learned_patterns: [] } })
@@ -937,7 +937,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityVRAM = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/vram?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/vram`)
       if (res.ok) {
         const data = await res.json()
         setVramTetris(data.blocks || [])
@@ -949,7 +949,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityHealth = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/health?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/health`)
       if (res.ok) {
         const data = await res.json()
         setHealthOrganism(data || { overall_health: 0, breathing_rate: 1, organs: [], veins: [] })
@@ -961,7 +961,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityConfidence = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/confidence?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/confidence`)
       if (res.ok) {
         const data = await res.json()
         setConfidencePoints(data.points || [])
@@ -973,7 +973,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityPresetsLineage = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/presets/lineage?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/presets/lineage`)
       if (res.ok) {
         const data = await res.json()
         setPresetLineage(data.presets || [])
@@ -985,7 +985,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityNarrative = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/narrative/current?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/narrative/current`)
       if (res.ok) {
         const data = await res.json()
         setSessionNarrative(data || { phases: [], events: [], current_phase: 'setup' })
@@ -997,7 +997,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityNegotiations = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/negotiations?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/negotiations`)
       if (res.ok) {
         const data = await res.json()
         setNegotiations(data.negotiations || [])
@@ -1009,7 +1009,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityFailures = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/failures?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/failures`)
       if (res.ok) {
         const data = await res.json()
         setFailures(data.failures || [])
@@ -1022,7 +1022,7 @@ export default function ProxyBridgeDashboard() {
   const runGatewaySearch = async () => {
     if (!gatewayQuery.trim()) return
     try {
-      const res = await fetch(`/api/proxy/gateway/search?XTransformPort=${PROXY_PORT}`, {
+      const res = await fetch(`/gateway/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1046,7 +1046,7 @@ export default function ProxyBridgeDashboard() {
   const runChatTest = async () => {
     if (!testPresetId) return
     try {
-      const res = await fetch(`/api/proxy/chat-test/run?XTransformPort=${PROXY_PORT}`, {
+      const res = await fetch(`/chat-test/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1121,7 +1121,7 @@ export default function ProxyBridgeDashboard() {
   // Set approval mode
   const updateApprovalMode = async (mode: string) => {
     try {
-      await fetch(`/api/proxy/approval-mode?XTransformPort=${PROXY_PORT}`, {
+      await fetch(`/approval-mode`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode })
@@ -1137,7 +1137,7 @@ export default function ProxyBridgeDashboard() {
     if (!orchestrationIntent.trim()) return
     
     try {
-      const res = await fetch(`/api/proxy/v1/agent/orchestrate?XTransformPort=${PROXY_PORT}`, {
+      const res = await fetch(`/v1/agent/orchestrate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1163,7 +1163,7 @@ export default function ProxyBridgeDashboard() {
     if (!knowledgeQuery.trim()) return
     
     try {
-      const res = await fetch(`/api/proxy/knowledge?XTransformPort=${PROXY_PORT}&query=${encodeURIComponent(knowledgeQuery)}`)
+      const res = await fetch(`/knowledge&query=${encodeURIComponent(knowledgeQuery)}`)
       if (res.ok) {
         const data = await res.json()
         setKnowledgeResults({ nodes: data.nodes, paths: data.paths })
@@ -1186,7 +1186,7 @@ export default function ProxyBridgeDashboard() {
         content = await indexFile.text()
       }
       
-      const res = await fetch(`/api/proxy/knowledge/index?XTransformPort=${PROXY_PORT}`, {
+      const res = await fetch(`/knowledge/index`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -1232,7 +1232,7 @@ export default function ProxyBridgeDashboard() {
     setIsFetchingUrl(true)
     try {
       // Use a proxy to fetch the URL (to avoid CORS)
-      const res = await fetch(`/api/proxy/knowledge/fetch?XTransformPort=${PROXY_PORT}&url=${encodeURIComponent(indexUrl)}`)
+      const res = await fetch(`/knowledge/fetch&url=${encodeURIComponent(indexUrl)}`)
       
       if (res.ok) {
         const data = await res.json()
@@ -3375,7 +3375,7 @@ export default function ProxyBridgeDashboard() {
                           <p className="text-slate-500 mt-2"># Orchestrate</p>
                           <p className="text-purple-400">POST /v1/agent/orchestrate</p>
                           <p className="text-slate-500 mt-2"># Knowledge Query</p>
-                          <p className="text-emerald-400">GET /api/proxy/knowledge</p>
+                          <p className="text-emerald-400">GET /knowledge</p>
                         </div>
                       </CardContent>
                     </Card>
@@ -3489,7 +3489,7 @@ export default function ProxyBridgeDashboard() {
                   onClick={async () => {
                     await saveSettings()
                     try {
-                      await fetch(`/api/proxy/models/reconnect?XTransformPort=${PROXY_PORT}`, { method: 'POST' })
+                      await fetch(`/models/reconnect`, { method: 'POST' })
                       setTimeout(() => { /* Status and models refresh via hooks */ }, 1500)
                     } catch (e) { console.error('Reconnect failed:', e) }
                   }}
@@ -3658,7 +3658,7 @@ export default function ProxyBridgeDashboard() {
                   className="h-24 flex flex-col items-center justify-center gap-2 border-slate-600 text-slate-300 hover:text-white hover:border-cyan-500/50"
                   onClick={async () => {
                     try {
-                      const res = await fetch(`/api/proxy/settings/export?XTransformPort=${PROXY_PORT}`)
+                      const res = await fetch(`/settings/export`)
                       if (res.ok) {
                         const blob = await res.blob()
                         const url = URL.createObjectURL(blob)

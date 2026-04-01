@@ -12,6 +12,21 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3001,
+    port: 3000,
+    proxy: {
+      '/api': 'http://localhost:8000',
+      '/v1': 'http://localhost:8000',
+      '/status': 'http://localhost:8000',
+      '/dashboard': 'http://localhost:8000',
+      '/models': 'http://localhost:8000',
+      '/gateway': 'http://localhost:8000',
+      '/observability': 'http://localhost:8000',
+      '/knowledge': 'http://localhost:8000',
+      '/async': 'http://localhost:8000',
+      '/mcp': 'http://localhost:8000',
+      '/a2a': 'http://localhost:8000',
+      '/settings': 'http://localhost:8000',
+      '/presets': 'http://localhost:8000',
+    },
   },
 })

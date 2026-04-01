@@ -1,4 +1,4 @@
-'use client'
+
 
 import { useState, useCallback, useRef } from 'react'
 
@@ -27,7 +27,7 @@ export interface UseStatefulChatReturn {
   currentModel: string
 }
 
-const PROXY_BRIDGE_URL = '/api/proxy'
+const PROXY_BRIDGE_URL = '' // Direct proxy via /v1
 
 export function useStatefulChat(): UseStatefulChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([])

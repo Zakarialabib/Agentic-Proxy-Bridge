@@ -1,4 +1,4 @@
-'use client'
+
 
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Activity, BookOpen, Zap, Sparkles, Brain, Network, Wrench, Eye, MessageSquare } from 'lucide-react'

@@ -1,4 +1,4 @@
-'use client'
+
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
-const PROXY_BRIDGE_URL = '/api/proxy'
+const PROXY_BRIDGE_URL = ''
 
 interface AvailableModel {
   id: string

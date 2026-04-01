@@ -29,7 +29,7 @@ import type {
   WorklogEntry
 } from './types'
 
-const BASE_URL = 'http://localhost:3001'
+const BASE_URL = '' // Use relative paths for Vite proxy
 
 async function fetchProxy<T>(endpoint: string, options?: RequestInit): Promise<T | null> {
   try {
@@ -54,29 +54,28 @@ export async function fetchStatus(): Promise<ProxyStatus | null> {
 
 // Models
 export async function fetchAvailableModels(): Promise<ModelInfo[] | null> {
-  const data = await fetchProxy<{ models: ModelInfo[]; connected: boolean }>('/models/available')
-  if (!data?.models) return null
+  const data = await fetchProxy<{ data: any[] }>('/v1/models')
+  if (!data?.data) return null
   
-  return data.models.map((m: any) => ({
-    modelKey: m.modelKey,
-    displayName: m.displayName,
-    type: m.type,
-    format: m.format,
-    sizeBytes: m.sizeBytes,
-    sizeGB: m.sizeGB,
-    params: m.params,
-    architecture: m.architecture,
-    quantization: m.quantization,
-    loaded: m.loaded,
-    id: m.modelKey,
-    name: m.displayName,
-    vram: m.sizeGB,
-    contextLength: m.type === 'llm' ? 8192 : 0,
-    capabilities: m.type === 'llm' ? ['chat', 'reasoning'] : ['embedding'],
-    tps: m.type === 'llm' ? 30 : 0,
-    ttft: m.type === 'llm' ? 150 : 0,
-    bestFor: m.type === 'embedding' ? 'Embeddings, semantic search' :
-             m.params ? `${m.params} model` : 'General chat',
+  return data.data.map((m: any) => ({
+    modelKey: m.id,
+    displayName: m.id.split('/').pop() || m.id,
+    type: m.id.includes('embedding') ? 'embedding' : 'llm',
+    format: 'GGUF',
+    sizeBytes: 0,
+    sizeGB: 0,
+    params: '',
+    architecture: '',
+    quantization: '',
+    loaded: true,
+    id: m.id,
+    name: m.id.split('/').pop() || m.id,
+    vram: 0,
+    contextLength: 8192,
+    capabilities: m.id.includes('embedding') ? ['embedding'] : ['chat'],
+    tps: 0,
+    ttft: 0,
+    bestFor: 'General use',
   }))
 }
 
@@ -269,14 +268,13 @@ export async function fetchPerformanceMetrics(): Promise<PerformanceMetrics | nu
   return fetchProxy('/metrics')
 }
 
-export async function fetchWorklog(): Promise<WorklogEntry[] | null> {
+export async function fetchWorklogs(): Promise<WorklogEntry[]> {
   try {
-    const res = await fetch('http://localhost:3001/api/worklog')
-    if (!res.ok) return null
-    const data = await res.json()
-    return data.entries ?? null
-  } catch {
-    return null
+    const data = await fetchProxy<WorklogEntry[]>('/api/worklog/')
+    return data || []
+  } catch (error) {
+    console.error('Failed to fetch worklogs:', error)
+    return []
   }
 }
 
