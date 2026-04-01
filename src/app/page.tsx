@@ -812,7 +812,7 @@ export default function ProxyBridgeDashboard() {
     try {
       if (currentlyLoaded) {
         // Find the instance ID for this model
-        const loadedModel = loadedModels?.data?.find(m => m.instance_id === modelKey)
+        const loadedModel = loadedModels?.data?.find((m) => m.instance_id === modelKey || m.instance_id.startsWith(`${modelKey}:`))
         if (loadedModel) {
           unloadModel.mutate(loadedModel.instance_id)
         }

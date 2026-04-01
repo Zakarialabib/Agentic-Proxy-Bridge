@@ -32,7 +32,7 @@ export default function ProxyBridgeDashboard() {
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([])
   
   const { currentModel, setCurrentModel, metrics, cacheStats, sendMessage, loadModels, loadModel, unloadModel } = useInference({
-    defaultModel: 'qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2'
+    defaultModel: 'qwen3.5-4b'
   })
   
   const { isStreaming, streamedContent, startStream } = useStreamingChat(currentModel)

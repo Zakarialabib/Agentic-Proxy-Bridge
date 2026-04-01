@@ -77,6 +77,7 @@ export function useSystemStatusData(): UseSystemStatusDataReturn {
     onSuccess: () => {
       // Invalidate and refetch loaded models
       queryClient.invalidateQueries({ queryKey: ['models-loaded'] })
+      queryClient.invalidateQueries({ queryKey: ['models-available'] })
       queryClient.invalidateQueries({ queryKey: ['system-status'] })
     },
   })
@@ -86,6 +87,7 @@ export function useSystemStatusData(): UseSystemStatusDataReturn {
     onSuccess: () => {
       // Invalidate and refetch loaded models
       queryClient.invalidateQueries({ queryKey: ['models-loaded'] })
+      queryClient.invalidateQueries({ queryKey: ['models-available'] })
       queryClient.invalidateQueries({ queryKey: ['system-status'] })
     },
   })

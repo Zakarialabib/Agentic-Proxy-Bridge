@@ -34,7 +34,7 @@ export function useStatefulChat(): UseStatefulChatReturn {
   const [responseId, setResponseId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [currentModel, setCurrentModel] = useState('qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2')
+  const [currentModel, setCurrentModel] = useState('qwen3.5-4b')
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const sendMessage = useCallback(

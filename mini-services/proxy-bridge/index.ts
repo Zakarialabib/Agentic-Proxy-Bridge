@@ -2154,12 +2154,13 @@ async function handleChatCompletions(req: Request): Promise<Response> {
       req,
       model,
       context.normalizedMessages,
-    temperature,
-    max_tokens,
-    context.budgetedContext,
-    intent
-  );
-}
+      Boolean(stream),
+      temperature,
+      max_tokens,
+      context.budgetedContext,
+      intent
+    );
+  }
   
   // Fallback to standalone mode if LM Studio not available
   return handleStandaloneMode(messages, tools, session_id);

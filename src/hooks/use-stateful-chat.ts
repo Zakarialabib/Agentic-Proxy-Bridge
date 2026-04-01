@@ -34,7 +34,7 @@ export function useStatefulChat(): UseStatefulChatReturn {
   const [responseId, setResponseId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [currentModel, setCurrentModel] = useState('qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2')
+  const [currentModel, setCurrentModel] = useState('qwen3.5-4b')
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const sendMessage = useCallback(
@@ -84,6 +84,12 @@ export function useStatefulChat(): UseStatefulChatReturn {
           throw new Error(errorData.error || `HTTP ${response.status}: Failed to send message`)
         }
 
+        const contentType = response.headers.get('content-type') || ''
+        if (!contentType.includes('application/json')) {
+          const text = await response.text()
+          throw new Error(text || 'Non-JSON response from chat completions endpoint')
+        }
+
         const data = await response.json()
 
         // Extract assistant response from OpenAI format output
@@ -130,7 +136,7 @@ export function useStatefulChat(): UseStatefulChatReturn {
         abortControllerRef.current = null
       }
     },
-    [responseId, currentModel]
+    [messages, currentModel]
   )
 
   const clearHistory = useCallback(() => {
