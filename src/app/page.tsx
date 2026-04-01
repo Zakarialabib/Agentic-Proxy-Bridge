@@ -677,9 +677,8 @@ export default function ProxyBridgeDashboard() {
   const [testResult, setTestResult] = useState<{
     preset_name: string
     category: string
-    execution: { response: string; elapsed_ms: number }
-    validation: { overall_passed: boolean; results: { check: string; passed: boolean; details: string }[] }
-    metrics: { ttft_ms: number; tps: number; tokens_generated: number }
+    execution: { elapsed_ms: number; success: boolean }
+    output: any
   } | null>(null)
 
   // Observability state
@@ -2026,6 +2025,37 @@ export default function ProxyBridgeDashboard() {
                             <Play className="w-4 h-4 mr-2" />
                             Run Test
                           </Button>
+                        </div>
+                      )}
+                      
+                      {testResult && (
+                        <div className="mt-6 space-y-4">
+                          <h4 className="text-sm font-medium text-white flex items-center gap-2 border-b border-slate-700 pb-2">
+                            <Terminal className="w-4 h-4 text-cyan-400" />
+                            Test Result: {testResult.preset_name}
+                          </h4>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                              <span className="text-xs text-slate-400 block mb-1">Status</span>
+                              <Badge className={testResult.execution?.success ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30'}>
+                                {testResult.execution?.success ? 'Success' : 'Failed'}
+                              </Badge>
+                            </div>
+                            <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                              <span className="text-xs text-slate-400 block mb-1">Latency</span>
+                              <span className="text-sm text-amber-400 font-mono">{testResult.execution?.elapsed_ms}ms</span>
+                            </div>
+                          </div>
+
+                          <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
+                            <span className="text-xs text-slate-500 block mb-2">Output</span>
+                            <ScrollArea className="h-[200px] w-full rounded-md">
+                              <pre className="text-xs text-emerald-300 font-mono whitespace-pre-wrap">
+                                {JSON.stringify(testResult.output, null, 2)}
+                              </pre>
+                            </ScrollArea>
+                          </div>
                         </div>
                       )}
                     </CardContent>

@@ -2,6 +2,7 @@
  * Comprehensive Benchmark Suite for Proxy-Bridge
  * Tests: Presets, Embeddings, Reranking, Context Engineering, RAG
  */
+export {}
 
 const PROXY_BRIDGE_URL = "http://localhost:3001";
 const TIMEOUT_MS = 20000;
