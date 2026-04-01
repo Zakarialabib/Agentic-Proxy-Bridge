@@ -1,5 +1,5 @@
 {
-  "timestamp": 1774999076734,
+  "timestamp": 1775057577826,
   "services": {
     "lmStudio": true,
     "proxyBridge": true
@@ -7,93 +7,81 @@
   "benchmarks": [
     {
       "benchmark": "chat_completions",
-      "iterations": 10,
+      "iterations": 0,
       "results": {
-        "avgLatency": 3.2,
-        "p50": 3,
-        "p95": 8,
-        "p99": 8,
-        "throughput": 1285.71
+        "avgLatency": 0,
+        "p50": 0,
+        "p95": 0,
+        "p99": 0,
+        "throughput": 0
       },
-      "passed": true,
+      "passed": false,
       "metadata": {}
     },
     {
       "benchmark": "embeddings_batching",
-      "iterations": 54,
+      "iterations": 0,
       "results": {
-        "avgLatency": 117,
-        "p50": 117,
-        "p95": 117,
-        "p99": 117,
+        "avgLatency": 0,
+        "p50": 0,
+        "p95": 0,
+        "p99": 0,
         "throughput": 0
       },
-      "passed": true,
-      "metadata": {
-        "embeddingCount": 0,
-        "deduplicatedCount": 54
-      }
+      "passed": false,
+      "metadata": {}
     },
     {
       "benchmark": "concurrent_requests",
-      "iterations": 20,
+      "iterations": 0,
       "results": {
-        "avgLatency": 8.2,
-        "p50": 8,
-        "p95": 10,
-        "p99": 11,
-        "throughput": 2222.22
+        "avgLatency": 0,
+        "p50": 0,
+        "p95": 0,
+        "p99": 0,
+        "throughput": 0
       },
-      "passed": true,
-      "metadata": {
-        "totalTimeMs": 11
-      }
+      "passed": false,
+      "metadata": {}
     },
     {
       "benchmark": "streaming_latency",
-      "iterations": 4,
+      "iterations": 0,
       "results": {
-        "avgLatency": 1.5,
-        "p50": 1,
-        "p95": 3,
-        "p99": 3,
-        "throughput": 2000
+        "avgLatency": 0,
+        "p50": 0,
+        "p95": 0,
+        "p99": 0,
+        "throughput": 0
       },
-      "passed": true,
+      "passed": false,
       "metadata": {}
     },
     {
       "benchmark": "connection_pool",
-      "iterations": 13,
+      "iterations": 0,
       "results": {
-        "avgLatency": 1.2,
-        "p50": 1,
-        "p95": 2,
-        "p99": 2,
-        "throughput": 13000
+        "avgLatency": 0,
+        "p50": 0,
+        "p95": 0,
+        "p99": 0,
+        "throughput": 0
       },
       "passed": false,
-      "metadata": {
-        "poolSize": 10,
-        "queueLength": 0,
-        "failedCount": 0
-      }
+      "metadata": {}
     },
     {
       "benchmark": "embedding_deduplication",
-      "iterations": 7,
+      "iterations": 0,
       "results": {
-        "avgLatency": 116,
-        "p50": 116,
-        "p95": 116,
-        "p99": 116,
+        "avgLatency": 0,
+        "p50": 0,
+        "p95": 0,
+        "p99": 0,
         "throughput": 0
       },
-      "passed": true,
-      "metadata": {
-        "uniqueEmbeddings": 0,
-        "deduplicationRatio": 0
-      }
+      "passed": false,
+      "metadata": {}
     }
   ]
 }

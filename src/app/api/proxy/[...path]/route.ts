@@ -11,7 +11,7 @@ async function forward(request: NextRequest, params: Promise<{ path: string[] }>
   const upstreamPath = path.startsWith('v1/') || path === 'health'
     ? `/${path}`
     : `/api/proxy/${path}`
-  const proxyUrl = `http://localhost:${port}${upstreamPath}${query ? `?${query}` : ''}`
+  const proxyUrl = `http://127.0.0.1:${port}${upstreamPath}${query ? `?${query}` : ''}`
 
   try {
     const response = await fetch(proxyUrl, {
@@ -23,6 +23,19 @@ async function forward(request: NextRequest, params: Promise<{ path: string[] }>
     })
 
     const contentType = response.headers.get('content-type') || ''
+
+    // SSE / streaming: pass the body through as a readable stream
+    if (contentType.includes('text/event-stream') || (contentType.includes('text/plain') && response.body)) {
+      return new Response(response.body, {
+        status: response.status,
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      })
+    }
+
     if (contentType.includes('application/json')) {
       return NextResponse.json(await response.json(), { status: response.status })
     }

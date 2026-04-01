@@ -62,7 +62,7 @@ async function bunSleep(ms: number): Promise<void> {
 
 // Memory Pressure Monitoring
 function checkMemoryPressure(): { pressure: 'low' | 'medium' | 'high'; usage: number } {
-  const usage = Bun.memory.heap.used / 1024 / 1024; // MB
+  const usage = process.memoryUsage().heapUsed / 1024 / 1024; // MB
   if (usage > 300) return { pressure: 'high', usage };
   if (usage > 150) return { pressure: 'medium', usage };
   return { pressure: 'low', usage };
@@ -74,13 +74,13 @@ function shouldThrottleRequests(): boolean {
 
 // Bun-specific performance: Memory monitoring with detailed stats
 function getDetailedMemoryStats() {
-  const mem = Bun.memory();
+  const mem = process.memoryUsage();
   return {
-    heapUsed: Math.round(mem.heap.used / 1024 / 1024),
-    heapTotal: Math.round(mem.heap.total / 1024 / 1024),
+    heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+    heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
     external: Math.round(mem.external / 1024 / 1024),
-    unitCount: mem.unitCount,
-    rapidJSON: mem.rapidJSON,
+    unitCount: 0,
+    rapidJSON: 0,
     pressure: checkMemoryPressure()
   };
 }
@@ -158,8 +158,10 @@ async function* interceptAndExecuteTools(
   const encoder = new TextEncoder();
   let currentResponse = initialResponse;
   let currentMessages = [...messages];
+  let recursiveHops = 0;
 
-  while (true) {
+  while (recursiveHops < MAX_REACT_STEPS) {
+    recursiveHops++;
     const stream = streamFromResponse(currentResponse);
     let isToolCallMode = false;
     let toolCallBuffer = "";
@@ -303,7 +305,23 @@ async function* interceptAndExecuteTools(
 // ============== Configuration ==============
 
 const PORT = 3001;
-const MAX_REACT_STEPS = 15;
+const MAX_REACT_STEPS = 10;
+const GLOBAL_AGENTIC_SYSTEM_PROMPT = `You are a highly sophisticated Agentic AI assistant.
+You have access to a local Knowledge Graph and specialized tools to assist the user.
+
+## Tool Usage Rules
+- To use a tool, you MUST output a XML-wrapped JSON block:
+<tool_call>
+{"name": "tool_name", "arguments": {"arg1": "value1"}}
+</tool_call>
+- Wait for the <tool_response> before continuing your reasoning or providing a final answer.
+- Only use registered tools: file_read, file_list.
+- Do NOT make up tools or assume tools exist that aren't mentioned.
+
+## Context & Reasoning
+- You will be provided with specialized context from the local Knowledge Graph.
+- Always provide a brief "Reasoning" line before calling a tool.
+- Integrate context naturally; do not explicitly mention "The Knowledge Graph says...".`;
 const VRAM_BUDGET_MB = 8192; // Quadro M4000 8GB
 const PRE_TRIGGER_THRESHOLD_MS = 5000;
 const ASYNC_TOOL_THRESHOLD_MS = 5000;
@@ -2136,12 +2154,12 @@ async function handleChatCompletions(req: Request): Promise<Response> {
       req,
       model,
       context.normalizedMessages,
-      stream,
-      temperature,
-      max_tokens,
-      context.budgetedContext
-    );
-  }
+    temperature,
+    max_tokens,
+    context.budgetedContext,
+    intent
+  );
+}
   
   // Fallback to standalone mode if LM Studio not available
   return handleStandaloneMode(messages, tools, session_id);
@@ -2154,7 +2172,8 @@ async function handleNativeChatCompletions(
   stream: boolean,
   temperature?: number,
   max_tokens?: number,
-  retrievalContext?: string
+  retrievalContext?: string,
+  intent?: { intentType: string; confidence: number }
 ): Promise<Response> {
   try {
     const settings = getSettingsManager().getLMStudioConnection();
@@ -2167,7 +2186,8 @@ async function handleNativeChatCompletions(
     const lmStudioRequest: any = {
       model,
       messages: [
-        ...(retrievalContext ? [{ role: "system", content: `Context:\n${retrievalContext}` }] : []),
+        { role: "system", content: `${GLOBAL_AGENTIC_SYSTEM_PROMPT}${intent ? `\n\n[System Analysis: Detected Intent is ${intent.intentType} (Confidence: ${Math.round(intent.confidence * 100)}%)]` : ""}` },
+        ...(retrievalContext ? [{ role: "system", content: `## Knowledge Graph Context\n${retrievalContext}` }] : []),
         ...messages
       ]
     };

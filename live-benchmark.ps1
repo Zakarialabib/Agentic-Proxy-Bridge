@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$LM_STUDIO_URL = "http://localhost:1234"
+$LM_STUDIO_URL = "http://192.168.1.12:1234"
 $PROXY_BRIDGE_URL = "http://localhost:3001"
 $RESULTS_FILE = "benchmark-results.json"
 $ITERATIONS = 10
@@ -180,7 +180,7 @@ function Start-ServiceCheck {
     
     # Check LM Studio
     Write-Host "Checking LM Studio on port 1234..." -NoNewline
-    $lmStudioRunning = Test-Port "localhost" 1234
+    $lmStudioRunning = Test-Port "192.168.1.12" 1234
     if ($lmStudioRunning) {
         Write-Host " $GREEN[OK]$RESET" -ForegroundColor Green
     } else {

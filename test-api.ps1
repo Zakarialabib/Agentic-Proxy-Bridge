@@ -2,7 +2,7 @@
 # Tests all critical REST API endpoints with proper error handling
 
 $PROXY_BRIDGE = "http://localhost:3001"
-$LM_STUDIO = "http://localhost:1234"
+$LM_STUDIO = "http://192.168.1.12:1234"
 
 $global:LmStudioConnected = $false
 

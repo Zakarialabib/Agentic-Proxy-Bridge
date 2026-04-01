@@ -44,8 +44,8 @@ async function testPort(host: string, port: number): Promise<boolean> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 2000);
     
-    await fetch(`http://${host}:${port}`, { 
-      method: "HEAD",
+    await fetch(`http://${host}:${port}/v1/models`, { 
+      method: "GET",
       signal: controller.signal 
     });
     clearTimeout(timeout);
