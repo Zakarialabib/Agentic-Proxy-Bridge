@@ -135,7 +135,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 const DEFAULT_MODEL_PRESETS: Omit<ModelPreset, "id" | "created_at" | "last_used" | "usage_count">[] = [
   {
     name: "Code Generation",
-    model_key: "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2",
+    model_key: "qwen3.5-4b",
     context_length: 8192,
     gpu_offload_ratio: 1.0,
     temperature: 0.2,
@@ -148,7 +148,7 @@ const DEFAULT_MODEL_PRESETS: Omit<ModelPreset, "id" | "created_at" | "last_used"
   },
   {
     name: "Creative Writing",
-    model_key: "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2",
+    model_key: "qwen3.5-4b",
     context_length: 8192,
     gpu_offload_ratio: 1.0,
     temperature: 0.8,
@@ -161,7 +161,7 @@ const DEFAULT_MODEL_PRESETS: Omit<ModelPreset, "id" | "created_at" | "last_used"
   },
   {
     name: "Analysis & Reasoning",
-    model_key: "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2",
+    model_key: "qwen3.5-4b",
     context_length: 8192,
     gpu_offload_ratio: 1.0,
     temperature: 0.3,
@@ -186,7 +186,7 @@ const DEFAULT_MODEL_PRESETS: Omit<ModelPreset, "id" | "created_at" | "last_used"
   },
   {
     name: "Long Context",
-    model_key: "qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2",
+    model_key: "qwen3.5-4b",
     context_length: 32768,
     gpu_offload_ratio: 1.0,
     temperature: 0.5,
