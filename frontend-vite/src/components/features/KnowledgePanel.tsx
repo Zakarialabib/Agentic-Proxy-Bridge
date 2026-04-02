@@ -1,4 +1,4 @@
-'use client'
+
 
 import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -69,10 +69,10 @@ export function KnowledgePanel({
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <Search className="w-5 h-5 text-purple-400" />
-            Query Knowledge Graph
+            Explore Context Topology
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Navigate concepts, not just retrieve text
+            Navigate the relationships and embeddings currently available for RAG injection
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -111,10 +111,10 @@ export function KnowledgePanel({
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-emerald-400" />
-            Index Documentation
+            Ingest to Context Base
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Transform documentation into active knowledge topology
+            Feed documentation and files into the proxy's active knowledge topology for context augmentation
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

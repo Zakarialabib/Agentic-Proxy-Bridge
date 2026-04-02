@@ -1,4 +1,4 @@
-'use client'
+
 
 import { useState, useCallback, useRef } from 'react'
 
@@ -13,6 +13,9 @@ export interface UseStatefulChatOptions {
   model?: string
   temperature?: number
   maxTokens?: number
+  contextWindow?: number
+  systemMessage?: string
+  tools?: any[]
   store?: boolean
 }
 
@@ -27,14 +30,14 @@ export interface UseStatefulChatReturn {
   currentModel: string
 }
 
-const PROXY_BRIDGE_URL = '/api/proxy'
+const PROXY_BRIDGE_URL = '' // Direct proxy via /v1
 
 export function useStatefulChat(): UseStatefulChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [responseId, setResponseId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [currentModel, setCurrentModel] = useState('qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2')
+  const [currentModel, setCurrentModel] = useState('qwen3.5-4b')
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const sendMessage = useCallback(
@@ -56,10 +59,10 @@ export function useStatefulChat(): UseStatefulChatReturn {
 
       try {
         // Build request body for standard chat completion
-        const requestMessages = [
-          ...messages.map(m => ({ role: m.role, content: m.content })),
-          { role: 'user', content: input.trim() }
-        ];
+        const baseMessages = messages.map(m => ({ role: m.role, content: m.content }))
+        const requestMessages = options?.systemMessage
+          ? [{ role: 'system', content: options.systemMessage }, ...baseMessages, { role: 'user', content: input.trim() }]
+          : [...baseMessages, { role: 'user', content: input.trim() }]
 
         const requestBody = {
           model: options?.model || currentModel,
@@ -67,6 +70,8 @@ export function useStatefulChat(): UseStatefulChatReturn {
           stream: false,
           ...(options?.temperature !== undefined && { temperature: options.temperature }),
           ...(options?.maxTokens !== undefined && { max_tokens: options.maxTokens }),
+          ...(options?.contextWindow !== undefined && { contextWindow: options.contextWindow }),
+          ...(options?.tools && options.tools.length > 0 && { tools: options.tools }),
         }
 
         // Call standard chat completions endpoint via proxy

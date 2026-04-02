@@ -1,4 +1,4 @@
-'use client'
+
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -54,10 +54,10 @@ export function GatewayPanel({
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <Zap className="w-5 h-5 text-amber-400" />
-              Gateway Search
+              Prompt & Embedding Analyzer
             </CardTitle>
             <CardDescription className="text-slate-400">
-              Task-aware preset templates with gateway transformation
+              Test how the proxy understands and transforms your prompt before hitting the LLM
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -139,10 +139,10 @@ export function GatewayPanel({
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <Terminal className="w-5 h-5 text-cyan-400" />
-              Gateway Inspector
+              Analysis & Transformation Pipeline
             </CardTitle>
             <CardDescription className="text-slate-400">
-              Input/Output transformation log
+              Input, Intent classification, and Rerank output log
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -181,8 +181,8 @@ export function GatewayPanel({
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-[300px] text-slate-500">
-                <Terminal className="w-12 h-12 mb-2" />
-                <p>Run a gateway search to see transformation</p>
+                <Terminal className="w-12 h-12 mb-2 opacity-20" />
+                <p>Submit a prompt to analyze embedding and rerank metrics</p>
               </div>
             )}
           </CardContent>
@@ -194,8 +194,11 @@ export function GatewayPanel({
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <Gauge className="w-5 h-5 text-purple-400" />
-              MRL Dimension Presets
+              Embedding Representation (MRL)
             </CardTitle>
+            <CardDescription className="text-slate-400">
+              Select dimensionality to balance speed vs. semantic depth
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-4 gap-2">
@@ -253,10 +256,10 @@ export function GatewayPanel({
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <Play className="w-5 h-5 text-emerald-400" />
-            Chat Test Presets
+            Scenario Optimization Tests
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Built-in test suite for model capabilities, performance, and robustness
+            Automated test suite to evaluate embedding latency, intent routing, and rerank quality
           </CardDescription>
         </CardHeader>
         <CardContent>

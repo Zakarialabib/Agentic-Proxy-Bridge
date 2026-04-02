@@ -1,4 +1,4 @@
-'use client'
+
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -335,7 +335,7 @@ export function ChatInterface({
               <p className="text-slate-500 mt-2"># Orchestrate</p>
               <p className="text-purple-400">POST /v1/agent/orchestrate</p>
               <p className="text-slate-500 mt-2"># Knowledge Query</p>
-              <p className="text-emerald-400">GET /api/proxy/knowledge</p>
+              <p className="text-emerald-400">GET /knowledge</p>
             </div>
           </CardContent>
         </Card>

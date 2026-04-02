@@ -67,8 +67,8 @@ export function DashboardHeader({ status, uptime, proxyPort }: DashboardHeaderPr
               )}
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white tracking-tight">LMStudio Proxy Bridge</h1>
-              <p className="text-xs text-slate-400">MCP/A2A • Knowledge Graph • Orchestration</p>
+              <h1 className="text-lg font-bold text-white tracking-tight">Proxy Bridge Control Space</h1>
+              <p className="text-xs text-slate-400">Context Engineering • Embeddings • Tool Orchestration</p>
             </div>
           </div>
           

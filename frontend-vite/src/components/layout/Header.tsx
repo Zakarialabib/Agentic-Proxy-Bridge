@@ -1,4 +1,4 @@
-'use client'
+
 
 import { Server, Settings, Wifi, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'

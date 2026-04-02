@@ -1,17 +1,17 @@
-import time
-from fastapi import APIRouter
-from app.schemas import ModelListResponse, Model
+import httpx
+from fastapi import APIRouter, HTTPException
+from app.schemas import ModelListResponse
+from app.core.settings import settings
 
 router = APIRouter(prefix="/v1", tags=["Models"])
 
-@router.get("/models", response_model=ModelListResponse)
+@router.get("/models")
 async def list_models():
-    # Return a basic static list of models for the skeleton
-    current_time = int(time.time())
-    return ModelListResponse(
-        data=[
-            Model(id="gpt-3.5-turbo", created=current_time, owned_by="openai"),
-            Model(id="gpt-4", created=current_time, owned_by="openai"),
-            Model(id="text-embedding-ada-002", created=current_time, owned_by="openai"),
-        ]
-    )
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{settings.lm_studio_base_url}/models")
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        # Fallback if LM Studio is down
+        return {"object": "list", "data": []}

@@ -1,4 +1,4 @@
-'use client'
+
 
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
@@ -637,6 +637,8 @@ export default function ProxyBridgeDashboard() {
   const [chatContextLength, setChatContextLength] = useState(8192)
   const [chatThinkingMode, setChatThinkingMode] = useState(false)
   const [chatSystemPrompt, setChatSystemPrompt] = useState('')
+  const [chatTools, setChatTools] = useState<any[]>([])
+  const [activeScenario, setActiveScenario] = useState<string | null>(null)
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false)
 
   // Model presets state
@@ -717,7 +719,7 @@ export default function ProxyBridgeDashboard() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/settings?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/settings`)
       if (res.ok) {
         const data = await res.json()
         setLmStudioHost(data.lm_studio?.host || '192.168.1.12')
@@ -760,7 +762,7 @@ export default function ProxyBridgeDashboard() {
           pre_warm: preWarmModels
         }
       }
-      const res = await fetch(`/api/proxy/settings?XTransformPort=${PROXY_PORT}`, {
+      const res = await fetch(`/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
@@ -777,7 +779,7 @@ export default function ProxyBridgeDashboard() {
   // Fetch model presets
   const fetchModelPresets = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/settings/presets?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/settings/presets`)
       if (res.ok) {
         const data = await res.json()
         setModelPresets(data.presets || [])
@@ -827,7 +829,7 @@ export default function ProxyBridgeDashboard() {
   // Fetch functions
   const fetchKnowledge = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/knowledge?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/knowledge`)
       if (res.ok) {
         const data = await res.json()
         setKnowledgeNodes(data.nodes || [])
@@ -851,7 +853,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchMCPServers = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/mcp/servers?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/mcp/servers`)
       if (res.ok) {
         const data = await res.json()
         setMcpServers(data.servers)
@@ -863,7 +865,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchA2AAgents = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/a2a/agents?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/a2a/agents`)
       if (res.ok) {
         const data = await res.json()
         setA2aAgents(data.agents)
@@ -875,7 +877,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchAsyncTasks = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/async/tasks?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/async/tasks`)
       if (res.ok) {
         const data = await res.json()
         setAsyncTasks(data.tasks)
@@ -887,7 +889,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchEmbeddingPresets = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/presets/embedding?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/presets/embedding`)
       if (res.ok) {
         const data = await res.json()
         setEmbeddingPresets(data.presets || {})
@@ -901,7 +903,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchChatTestPresets = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/presets/chat-tests?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/presets/chat-tests`)
       if (res.ok) {
         const data = await res.json()
         setChatTestPresets(data.presets || [])
@@ -913,7 +915,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchGatewayLog = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/gateway/log?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/gateway/log`)
       if (res.ok) {
         const data = await res.json()
         setGatewayLog(data.transformations || [])
@@ -925,7 +927,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityHorizon = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/horizon?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/horizon`)
       if (res.ok) {
         const data = await res.json()
         setThreeTimeHorizon(data || { now: { alerts: [], sparklines: [], hot_channels: [] }, recent: { trends: [], patterns: [], hints: [] }, deep: { evolution: [], preset_tree: [], learned_patterns: [] } })
@@ -937,7 +939,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityVRAM = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/vram?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/vram`)
       if (res.ok) {
         const data = await res.json()
         setVramTetris(data.blocks || [])
@@ -949,7 +951,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityHealth = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/health?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/health`)
       if (res.ok) {
         const data = await res.json()
         setHealthOrganism(data || { overall_health: 0, breathing_rate: 1, organs: [], veins: [] })
@@ -961,7 +963,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityConfidence = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/confidence?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/confidence`)
       if (res.ok) {
         const data = await res.json()
         setConfidencePoints(data.points || [])
@@ -973,7 +975,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityPresetsLineage = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/presets/lineage?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/presets/lineage`)
       if (res.ok) {
         const data = await res.json()
         setPresetLineage(data.presets || [])
@@ -985,7 +987,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityNarrative = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/narrative/current?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/narrative/current`)
       if (res.ok) {
         const data = await res.json()
         setSessionNarrative(data || { phases: [], events: [], current_phase: 'setup' })
@@ -997,7 +999,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityNegotiations = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/negotiations?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/negotiations`)
       if (res.ok) {
         const data = await res.json()
         setNegotiations(data.negotiations || [])
@@ -1009,7 +1011,7 @@ export default function ProxyBridgeDashboard() {
 
   const fetchObservabilityFailures = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proxy/observability/failures?XTransformPort=${PROXY_PORT}`)
+      const res = await fetch(`/observability/failures`)
       if (res.ok) {
         const data = await res.json()
         setFailures(data.failures || [])
@@ -1022,7 +1024,7 @@ export default function ProxyBridgeDashboard() {
   const runGatewaySearch = async () => {
     if (!gatewayQuery.trim()) return
     try {
-      const res = await fetch(`/api/proxy/gateway/search?XTransformPort=${PROXY_PORT}`, {
+      const res = await fetch(`/gateway/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1046,7 +1048,7 @@ export default function ProxyBridgeDashboard() {
   const runChatTest = async () => {
     if (!testPresetId) return
     try {
-      const res = await fetch(`/api/proxy/chat-test/run?XTransformPort=${PROXY_PORT}`, {
+      const res = await fetch(`/chat-test/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1102,16 +1104,69 @@ export default function ProxyBridgeDashboard() {
   }, [fetchKnowledge, fetchMCPServers, fetchA2AAgents, fetchAsyncTasks, fetchEmbeddingPresets, fetchChatTestPresets, fetchGatewayLog, fetchObservabilityHorizon, fetchObservabilityVRAM, fetchObservabilityHealth, fetchObservabilityConfidence, fetchObservabilityPresetsLineage, fetchObservabilityNarrative, fetchObservabilityNegotiations, fetchObservabilityFailures])
 
   // Send message
+  // Scenario selection logic
+  const handleScenarioSelect = useCallback((scenario: string | null) => {
+    setActiveScenario(scenario)
+    if (!scenario) return
+
+    switch (scenario) {
+      case 'code_assistant':
+        setChatSystemPrompt('You are an expert coding assistant. You can read files and explore directories to understand the codebase. Always provide clear, well-formatted code.')
+        setChatTemperature(0.2)
+        setChatMaxTokens(4096)
+        setChatContextLength(32768)
+        setChatThinkingMode(true)
+        setChatTools([
+          { type: 'function', function: { name: 'file_list', description: 'List files in a directory', parameters: { type: 'object', properties: { path: { type: 'string' } } } } },
+          { type: 'function', function: { name: 'file_read', description: 'Read file contents', parameters: { type: 'object', properties: { path: { type: 'string' } } } } }
+        ])
+        break
+      case 'deep_researcher':
+        setChatSystemPrompt('You are a deep research agent. Use the web search tool to gather information, synthesize findings, and provide comprehensive reports.')
+        setChatTemperature(0.5)
+        setChatMaxTokens(8192)
+        setChatContextLength(128000)
+        setChatThinkingMode(true)
+        setChatTools([
+          { type: 'function', function: { name: 'web_search', description: 'Search the web for information', parameters: { type: 'object', properties: { query: { type: 'string' } } } } }
+        ])
+        break
+      case 'data_analyst':
+        setChatSystemPrompt('You are a data analyst. You can query the knowledge graph to find connections and patterns in the data.')
+        setChatTemperature(0.3)
+        setChatMaxTokens(4096)
+        setChatContextLength(32768)
+        setChatThinkingMode(false)
+        setChatTools([
+          { type: 'function', function: { name: 'query_knowledge_graph', description: 'Query the internal knowledge graph', parameters: { type: 'object', properties: { query: { type: 'string' } } } } }
+        ])
+        break
+      case 'quick_chat':
+        setChatSystemPrompt('You are a fast, helpful assistant. Keep your answers brief, precise, and to the point.')
+        setChatTemperature(0.7)
+        setChatMaxTokens(1024)
+        setChatContextLength(8192)
+        setChatThinkingMode(false)
+        setChatTools([])
+        break
+    }
+    // Show advanced settings to let user see what changed
+    setShowAdvancedSettings(true)
+  }, [])
+
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading || !currentModel) return
     
     try {
       setLastActionTime(12)
       await sendStatefulMessage(inputMessage, {
-        model: currentModel,
-        temperature: chatTemperature,
-        maxTokens: chatMaxTokens
-      })
+          model: currentModel,
+          temperature: chatTemperature,
+          maxTokens: chatMaxTokens,
+          contextWindow: chatContextLength,
+          systemMessage: chatSystemPrompt,
+          tools: chatTools
+        })
       setInputMessage('')
     } catch (err) {
       console.error('Failed to send message:', err)
@@ -1121,7 +1176,7 @@ export default function ProxyBridgeDashboard() {
   // Set approval mode
   const updateApprovalMode = async (mode: string) => {
     try {
-      await fetch(`/api/proxy/approval-mode?XTransformPort=${PROXY_PORT}`, {
+      await fetch(`/approval-mode`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode })
@@ -1137,7 +1192,7 @@ export default function ProxyBridgeDashboard() {
     if (!orchestrationIntent.trim()) return
     
     try {
-      const res = await fetch(`/api/proxy/v1/agent/orchestrate?XTransformPort=${PROXY_PORT}`, {
+      const res = await fetch(`/v1/agent/orchestrate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1163,7 +1218,7 @@ export default function ProxyBridgeDashboard() {
     if (!knowledgeQuery.trim()) return
     
     try {
-      const res = await fetch(`/api/proxy/knowledge?XTransformPort=${PROXY_PORT}&query=${encodeURIComponent(knowledgeQuery)}`)
+      const res = await fetch(`/knowledge&query=${encodeURIComponent(knowledgeQuery)}`)
       if (res.ok) {
         const data = await res.json()
         setKnowledgeResults({ nodes: data.nodes, paths: data.paths })
@@ -1186,7 +1241,7 @@ export default function ProxyBridgeDashboard() {
         content = await indexFile.text()
       }
       
-      const res = await fetch(`/api/proxy/knowledge/index?XTransformPort=${PROXY_PORT}`, {
+      const res = await fetch(`/knowledge/index`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -1232,7 +1287,7 @@ export default function ProxyBridgeDashboard() {
     setIsFetchingUrl(true)
     try {
       // Use a proxy to fetch the URL (to avoid CORS)
-      const res = await fetch(`/api/proxy/knowledge/fetch?XTransformPort=${PROXY_PORT}&url=${encodeURIComponent(indexUrl)}`)
+      const res = await fetch(`/knowledge/fetch&url=${encodeURIComponent(indexUrl)}`)
       
       if (res.ok) {
         const data = await res.json()
@@ -1366,20 +1421,16 @@ export default function ProxyBridgeDashboard() {
       <nav className="border-b border-slate-700/50 bg-slate-800/30">
         <div className="container mx-auto px-4">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="bg-transparent h-12 p-0 gap-1">
-              {[
-                { value: 'dashboard', icon: Activity, label: 'Dashboard' },
-                { value: 'worklog', icon: BookOpen, label: 'Worklog' },
-                { value: 'gateway', icon: Zap, label: 'Gateway' },
-                { value: 'orchestrate', icon: Sparkles, label: 'Orchestrate' },
-                { value: 'knowledge', icon: Brain, label: 'Knowledge' },
-                { value: 'protocols', icon: Network, label: 'Protocols' },
-                { value: 'tools', icon: Wrench, label: 'Tools' },
-                { value: 'observability', icon: Eye, label: 'Observability' },
-                { value: 'performance', icon: Gauge, label: 'Performance' },
-                { value: 'chat', icon: MessageSquare, label: 'Chat' },
-              ].map(tab => (
-                <TabsTrigger
+            <TabsList className="bg-transparent h-12 p-0 gap-1 overflow-x-auto overflow-y-hidden whitespace-nowrap scrollbar-none flex-nowrap w-full">
+                {[
+                  { value: 'dashboard', icon: Activity, label: 'System Overview' },
+                  { value: 'gateway', icon: Zap, label: 'Embedding & Rerank' },
+                  { value: 'knowledge', icon: Brain, label: 'Context Base' },
+                  { value: 'tools', icon: Wrench, label: 'Agent Skills' },
+                  { value: 'performance', icon: Gauge, label: 'Proxy Telemetry' },
+                  { value: 'chat', icon: MessageSquare, label: 'Control Space' },
+                ].map(tab => (
+                  <TabsTrigger
                   key={tab.value}
                   value={tab.value}
                   className="data-[state=active]:bg-gradient-to-b data-[state=active]:from-cyan-500/20 data-[state=active]:to-emerald-500/10 data-[state=active]:text-cyan-400 data-[state=active]:border-b-2 data-[state=active]:border-cyan-400 data-[state=active]:shadow-lg data-[state=active]:shadow-cyan-500/10 px-4 h-12 rounded-none text-slate-400 hover:text-slate-200 transition-all duration-200"
@@ -1741,15 +1792,15 @@ export default function ProxyBridgeDashboard() {
                   {/* Gateway Search Interface */}
                   <div className="grid gap-6 lg:grid-cols-2">
                     <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
-                      <CardHeader>
-                        <CardTitle className="text-white flex items-center gap-2">
-                          <Zap className="w-5 h-5 text-amber-400" />
-                          Gateway Search
-                        </CardTitle>
-                        <CardDescription className="text-slate-400">
-                          Task-aware preset templates with gateway transformation
-                        </CardDescription>
-                      </CardHeader>
+                        <CardHeader>
+                          <CardTitle className="text-white flex items-center gap-2">
+                            <Zap className="w-5 h-5 text-amber-400" />
+                            Prompt & Embedding Analyzer
+                          </CardTitle>
+                          <CardDescription className="text-slate-400">
+                            Test how the proxy understands and transforms your prompt before hitting the LLM
+                          </CardDescription>
+                        </CardHeader>
                       <CardContent className="space-y-4">
                         <div>
                           <Label className="text-slate-300">Query</Label>
@@ -1827,15 +1878,15 @@ export default function ProxyBridgeDashboard() {
                     
                     {/* Gateway Inspector */}
                     <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
-                      <CardHeader>
-                        <CardTitle className="text-white flex items-center gap-2">
-                          <Terminal className="w-5 h-5 text-cyan-400" />
-                          Gateway Inspector
-                        </CardTitle>
-                        <CardDescription className="text-slate-400">
-                          Input/Output transformation log
-                        </CardDescription>
-                      </CardHeader>
+                        <CardHeader>
+                          <CardTitle className="text-white flex items-center gap-2">
+                            <Terminal className="w-5 h-5 text-cyan-400" />
+                            Analysis & Transformation Pipeline
+                          </CardTitle>
+                          <CardDescription className="text-slate-400">
+                            Input, Intent classification, and Rerank output log
+                          </CardDescription>
+                        </CardHeader>
                       <CardContent>
                         {gatewayResult ? (
                           <div className="space-y-4 text-sm">
@@ -1923,11 +1974,14 @@ export default function ProxyBridgeDashboard() {
                   <div className="grid gap-6 lg:grid-cols-2">
                     <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
                       <CardHeader>
-                        <CardTitle className="text-white flex items-center gap-2">
-                          <Gauge className="w-5 h-5 text-purple-400" />
-                          MRL Dimension Presets
-                        </CardTitle>
-                      </CardHeader>
+                          <CardTitle className="text-white flex items-center gap-2">
+                            <Gauge className="w-5 h-5 text-purple-400" />
+                            Embedding Representation (MRL)
+                          </CardTitle>
+                          <CardDescription className="text-slate-400">
+                            Select dimensionality to balance speed vs. semantic depth
+                          </CardDescription>
+                        </CardHeader>
                       <CardContent>
                         <div className="grid grid-cols-4 gap-2">
                           {Object.entries(mrlPresets).map(([key, preset]) => (
@@ -1981,16 +2035,16 @@ export default function ProxyBridgeDashboard() {
                   </div>
                   
                   {/* Chat Test Presets */}
-                  <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
-                    <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
-                        <Play className="w-5 h-5 text-emerald-400" />
-                        Chat Test Presets
-                      </CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Built-in test suite for model capabilities, performance, and robustness
-                      </CardDescription>
-                    </CardHeader>
+                    <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
+                      <CardHeader>
+                        <CardTitle className="text-white flex items-center gap-2">
+                          <Play className="w-5 h-5 text-emerald-400" />
+                          Scenario Optimization Tests
+                        </CardTitle>
+                        <CardDescription className="text-slate-400">
+                          Automated test suite to evaluate embedding latency, intent routing, and rerank quality
+                        </CardDescription>
+                      </CardHeader>
                     <CardContent>
                       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
                         {chatTestPresets.slice(0, 8).map(preset => (
@@ -2194,14 +2248,14 @@ export default function ProxyBridgeDashboard() {
                 <div className="grid gap-6 lg:grid-cols-2">
                   <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
                     <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
-                        <Search className="w-5 h-5 text-purple-400" />
-                        Query Knowledge Graph
-                      </CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Navigate concepts, not just retrieve text
-                      </CardDescription>
-                    </CardHeader>
+                        <CardTitle className="text-white flex items-center gap-2">
+                          <Search className="w-5 h-5 text-purple-400" />
+                          Explore Context Topology
+                        </CardTitle>
+                        <CardDescription className="text-slate-400">
+                          Navigate the relationships and embeddings currently available for RAG injection
+                        </CardDescription>
+                      </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="flex gap-2">
                         <Input
@@ -2236,14 +2290,14 @@ export default function ProxyBridgeDashboard() {
 
                   <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
                     <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
-                        <BookOpen className="w-5 h-5 text-emerald-400" />
-                        Index Documentation
-                      </CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Transform documentation into active knowledge topology
-                      </CardDescription>
-                    </CardHeader>
+                        <CardTitle className="text-white flex items-center gap-2">
+                          <BookOpen className="w-5 h-5 text-emerald-400" />
+                          Ingest to Context Base
+                        </CardTitle>
+                        <CardDescription className="text-slate-400">
+                          Feed documentation and files into the proxy's active knowledge topology for context augmentation
+                        </CardDescription>
+                      </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="flex gap-2">
                         <div className="flex-1">
@@ -2431,40 +2485,51 @@ export default function ProxyBridgeDashboard() {
               </TabsContent>
 
               {/* Tools Tab */}
+              {/* Tools / Agent Skills Tab */}
               <TabsContent value="tools" className="mt-0">
-                <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
-                  <CardHeader>
-                    <CardTitle className="text-white">Tool Registry</CardTitle>
-                    <CardDescription className="text-slate-400">
-                      {/* {tools.length} tools available across all protocols */}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-[500px]">
-                      <div className="space-y-2">
-                        {/* {tools.map((tool, i) => (
-                          <div key={i} className="p-3 rounded-lg bg-slate-900/50 border border-slate-700">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-medium text-white">{tool.name}</span>
+                <div className="space-y-6">
+                  <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
+                    <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2">
+                        <Server className="w-5 h-5 text-cyan-400" />
+                        Python Proxy Tools
+                      </CardTitle>
+                      <CardDescription className="text-slate-400">
+                        Native tools executing in the Python FastAPI backend layer to augment LM Studio capabilities.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {[
+                          { name: 'file_list', description: 'Lists all files within a specified local directory. Used by Code Assistant to explore workspaces.', icon: <FileJson className="w-4 h-4 text-cyan-400" />, source: 'python-proxy', safety: 'supervised' },
+                          { name: 'file_read', description: 'Reads the content of a specific file. Used to ingest code or documentation into the context window.', icon: <FileJson className="w-4 h-4 text-cyan-400" />, source: 'python-proxy', safety: 'supervised' },
+                          { name: 'web_search', description: 'Performs a live web search to gather up-to-date information. Used by the Deep Researcher scenario.', icon: <Globe className="w-4 h-4 text-purple-400" />, source: 'python-proxy', safety: 'autonomous' },
+                          { name: 'query_knowledge_graph', description: 'Queries the internal vectorized knowledge graph for entity relationships and context augmentation.', icon: <Database className="w-4 h-4 text-emerald-400" />, source: 'python-proxy', safety: 'autonomous' }
+                        ].map((tool, i) => (
+                          <div key={i} className="p-4 rounded-lg bg-slate-900/50 border border-slate-700/50 hover:border-slate-600 transition-all">
+                            <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
-                                {tool.source && (
-                                  <Badge variant="outline" className={`text-xs ${
-                                    tool.source.startsWith('mcp') ? 'text-cyan-400 border-cyan-500/30' : 'text-slate-400 border-slate-600'
-                                  }`}>
-                                    {tool.source}
-                                  </Badge>
-                                )}
-                                {tool.health && getHealthBadge(tool.health)}
-                                {getSafetyBadge(tool.safety_level)}
+                                {tool.icon}
+                                <span className="font-medium text-white">{tool.name}</span>
                               </div>
+                              <Badge variant="outline" className="text-xs bg-slate-800 text-slate-300 border-slate-600">
+                                {tool.source}
+                              </Badge>
                             </div>
                             <p className="text-sm text-slate-400">{tool.description}</p>
+                            <div className="mt-3">
+                              <Badge className={`text-[10px] uppercase tracking-wider ${
+                                tool.safety === 'autonomous' ? 'bg-emerald-500/20 text-emerald-400 border-0' : 'bg-amber-500/20 text-amber-400 border-0'
+                              }`}>
+                                {tool.safety} execution
+                              </Badge>
+                            </div>
                           </div>
-                        ))} */}
+                        ))}
                       </div>
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </div>
               </TabsContent>
 
               {/* Observability Tab */}
@@ -3141,20 +3206,56 @@ export default function ProxyBridgeDashboard() {
                 </div>
               </TabsContent>
 
-              {/* Performance Tab */}
+              {/* Performance / Proxy Telemetry Tab */}
               <TabsContent value="performance" className="mt-0">
                 <Phase8Dashboard />
               </TabsContent>
 
-              {/* Chat Tab */}
+              {/* Chat / Control Space Tab */}
               <TabsContent value="chat" className="mt-0">
                 <div className="grid gap-6 lg:grid-cols-3">
                   <Card className="lg:col-span-2 bg-slate-800/30 border-slate-700/50 backdrop-blur-sm flex flex-col h-[600px]">
-                    <CardHeader className="border-b border-slate-700/50">
-                      <CardTitle className="text-white">Chat Interface</CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Test the proxy with OpenAI-compatible API
-                      </CardDescription>
+                    <CardHeader className="border-b border-slate-700/50 pb-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <CardTitle className="text-white">Agentic Control Space</CardTitle>
+                          <CardDescription className="text-slate-400 mt-1">
+                            Orchestrate models with specialized capabilities, tools, and context profiles.
+                          </CardDescription>
+                        </div>
+                      </div>
+                      
+                      {/* Scenario Presets */}
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Badge 
+                          variant="outline"
+                          className={`cursor-pointer px-3 py-1.5 transition-all ${activeScenario === 'code_assistant' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.2)]' : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
+                          onClick={() => handleScenarioSelect('code_assistant')}
+                        >
+                          💻 Code Assistant
+                        </Badge>
+                        <Badge 
+                          variant="outline"
+                          className={`cursor-pointer px-3 py-1.5 transition-all ${activeScenario === 'deep_researcher' ? 'bg-purple-500/20 text-purple-400 border-purple-500/50 shadow-[0_0_10px_rgba(168,85,247,0.2)]' : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
+                          onClick={() => handleScenarioSelect('deep_researcher')}
+                        >
+                          🔬 Deep Researcher
+                        </Badge>
+                        <Badge 
+                          variant="outline"
+                          className={`cursor-pointer px-3 py-1.5 transition-all ${activeScenario === 'data_analyst' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
+                          onClick={() => handleScenarioSelect('data_analyst')}
+                        >
+                          📊 Data Analyst
+                        </Badge>
+                        <Badge 
+                          variant="outline"
+                          className={`cursor-pointer px-3 py-1.5 transition-all ${activeScenario === 'quick_chat' ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_10px_rgba(245,158,11,0.2)]' : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
+                          onClick={() => handleScenarioSelect('quick_chat')}
+                        >
+                          ⚡ Quick Chat
+                        </Badge>
+                      </div>
                     </CardHeader>
                     <ScrollArea className="flex-1 p-4">
                       {messages.length === 0 ? (
@@ -3260,6 +3361,35 @@ export default function ProxyBridgeDashboard() {
                       {/* Advanced Settings Panel */}
                       {showAdvancedSettings && (
                         <div className="mb-3 p-3 rounded-lg bg-slate-900/50 border border-slate-700 space-y-3">
+                          <div className="mb-2">
+                            <Label className="text-xs text-slate-400 mb-1 block">Compute Hardware Presets</Label>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge 
+                                className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                onClick={() => { setChatTemperature(0.7); setChatMaxTokens(2048); setChatContextLength(8192); setChatThinkingMode(false); setChatSystemPrompt(''); }}
+                              >
+                                Balanced
+                              </Badge>
+                              <Badge 
+                                className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                onClick={() => { setChatTemperature(0.2); setChatMaxTokens(1024); setChatContextLength(4096); setChatThinkingMode(false); setChatSystemPrompt('You are a helpful assistant. Keep your answers brief and to the point.'); }}
+                              >
+                                Fast Inference
+                              </Badge>
+                              <Badge 
+                                className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                onClick={() => { setChatTemperature(0.8); setChatMaxTokens(8192); setChatContextLength(32768); setChatThinkingMode(true); setChatSystemPrompt('You are an expert problem solver. Think step-by-step and provide detailed reasoning.'); }}
+                              >
+                                Deep Reasoning
+                              </Badge>
+                              <Badge 
+                                className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                onClick={() => { setChatTemperature(0.5); setChatMaxTokens(4096); setChatContextLength(128000); setChatThinkingMode(false); setChatSystemPrompt('You are a context-aware assistant analyzing a large codebase or document set.'); }}
+                              >
+                                Context Heavy
+                              </Badge>
+                            </div>
+                          </div>
                           <div className="grid grid-cols-3 gap-3">
                             <div>
                               <Label className="text-xs text-slate-400">Temperature: {chatTemperature}</Label>
@@ -3375,7 +3505,7 @@ export default function ProxyBridgeDashboard() {
                           <p className="text-slate-500 mt-2"># Orchestrate</p>
                           <p className="text-purple-400">POST /v1/agent/orchestrate</p>
                           <p className="text-slate-500 mt-2"># Knowledge Query</p>
-                          <p className="text-emerald-400">GET /api/proxy/knowledge</p>
+                          <p className="text-emerald-400">GET /knowledge</p>
                         </div>
                       </CardContent>
                     </Card>
@@ -3489,7 +3619,7 @@ export default function ProxyBridgeDashboard() {
                   onClick={async () => {
                     await saveSettings()
                     try {
-                      await fetch(`/api/proxy/models/reconnect?XTransformPort=${PROXY_PORT}`, { method: 'POST' })
+                      await fetch(`/models/reconnect`, { method: 'POST' })
                       setTimeout(() => { /* Status and models refresh via hooks */ }, 1500)
                     } catch (e) { console.error('Reconnect failed:', e) }
                   }}
@@ -3658,7 +3788,7 @@ export default function ProxyBridgeDashboard() {
                   className="h-24 flex flex-col items-center justify-center gap-2 border-slate-600 text-slate-300 hover:text-white hover:border-cyan-500/50"
                   onClick={async () => {
                     try {
-                      const res = await fetch(`/api/proxy/settings/export?XTransformPort=${PROXY_PORT}`)
+                      const res = await fetch(`/settings/export`)
                       if (res.ok) {
                         const blob = await res.blob()
                         const url = URL.createObjectURL(blob)
