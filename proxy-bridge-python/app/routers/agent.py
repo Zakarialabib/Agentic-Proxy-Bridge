@@ -5,6 +5,7 @@ from app.schemas import AgentOrchestrateRequest, ChatCompletionRequest
 from app.services.coalescer import embedding_coalescer
 from app.services.pool import connection_pool
 from app.services.streaming import stream_generator
+from app.services.context_builder import enforce_context_window, map_model_name
 import os
 import json
 
@@ -19,6 +20,9 @@ async def orchestrate_agent(request: AgentOrchestrateRequest):
     last_user_message = next((m.content for m in reversed(request.messages) if m.role == "user"), None)
     
     chat_payload = request.model_dump(exclude_none=True)
+    chat_payload["model"] = map_model_name(chat_payload.get("model", ""))
+    context_limit = chat_payload.pop("contextWindow", 16000)
+    chat_payload["messages"] = enforce_context_window(chat_payload.get("messages", []), max_tokens=context_limit)
     
     async def get_embedding():
         if not last_user_message:

@@ -13,6 +13,8 @@ export interface UseStatefulChatOptions {
   model?: string
   temperature?: number
   maxTokens?: number
+  contextWindow?: number
+  systemMessage?: string
   store?: boolean
 }
 
@@ -56,10 +58,10 @@ export function useStatefulChat(): UseStatefulChatReturn {
 
       try {
         // Build request body for standard chat completion
-        const requestMessages = [
-          ...messages.map(m => ({ role: m.role, content: m.content })),
-          { role: 'user', content: input.trim() }
-        ];
+        const baseMessages = messages.map(m => ({ role: m.role, content: m.content }))
+        const requestMessages = options?.systemMessage
+          ? [{ role: 'system', content: options.systemMessage }, ...baseMessages, { role: 'user', content: input.trim() }]
+          : [...baseMessages, { role: 'user', content: input.trim() }]
 
         const requestBody = {
           model: options?.model || currentModel,
@@ -67,6 +69,7 @@ export function useStatefulChat(): UseStatefulChatReturn {
           stream: false,
           ...(options?.temperature !== undefined && { temperature: options.temperature }),
           ...(options?.maxTokens !== undefined && { max_tokens: options.maxTokens }),
+          ...(options?.contextWindow !== undefined && { contextWindow: options.contextWindow }),
         }
 
         // Call standard chat completions endpoint via proxy

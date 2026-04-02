@@ -1108,10 +1108,12 @@ export default function ProxyBridgeDashboard() {
     try {
       setLastActionTime(12)
       await sendStatefulMessage(inputMessage, {
-        model: currentModel,
-        temperature: chatTemperature,
-        maxTokens: chatMaxTokens
-      })
+          model: currentModel,
+          temperature: chatTemperature,
+          maxTokens: chatMaxTokens,
+          contextWindow: chatContextLength,
+          systemMessage: chatSystemPrompt
+        })
       setInputMessage('')
     } catch (err) {
       console.error('Failed to send message:', err)
@@ -3260,6 +3262,35 @@ export default function ProxyBridgeDashboard() {
                       {/* Advanced Settings Panel */}
                       {showAdvancedSettings && (
                         <div className="mb-3 p-3 rounded-lg bg-slate-900/50 border border-slate-700 space-y-3">
+                          <div className="mb-2">
+                            <Label className="text-xs text-slate-400 mb-1 block">Compute Hardware Presets</Label>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge 
+                                className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                onClick={() => { setChatTemperature(0.7); setChatMaxTokens(2048); setChatContextLength(8192); setChatThinkingMode(false); setChatSystemPrompt(''); }}
+                              >
+                                Balanced
+                              </Badge>
+                              <Badge 
+                                className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                onClick={() => { setChatTemperature(0.2); setChatMaxTokens(1024); setChatContextLength(4096); setChatThinkingMode(false); setChatSystemPrompt('You are a helpful assistant. Keep your answers brief and to the point.'); }}
+                              >
+                                Fast Inference
+                              </Badge>
+                              <Badge 
+                                className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                onClick={() => { setChatTemperature(0.8); setChatMaxTokens(8192); setChatContextLength(32768); setChatThinkingMode(true); setChatSystemPrompt('You are an expert problem solver. Think step-by-step and provide detailed reasoning.'); }}
+                              >
+                                Deep Reasoning
+                              </Badge>
+                              <Badge 
+                                className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                onClick={() => { setChatTemperature(0.5); setChatMaxTokens(4096); setChatContextLength(128000); setChatThinkingMode(false); setChatSystemPrompt('You are a context-aware assistant analyzing a large codebase or document set.'); }}
+                              >
+                                Context Heavy
+                              </Badge>
+                            </div>
+                          </div>
                           <div className="grid grid-cols-3 gap-3">
                             <div>
                               <Label className="text-xs text-slate-400">Temperature: {chatTemperature}</Label>

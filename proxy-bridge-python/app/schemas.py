@@ -21,6 +21,11 @@ class ChatCompletionRequest(BaseModel):
     stream: Optional[bool] = False
     temperature: Optional[float] = 1.0
     max_tokens: Optional[int] = None
+    context_window: Optional[int] = Field(default=16000, alias="contextWindow")
+
+    class Config:
+        populate_by_name = True
+        extra = "allow"
 
 class EmbeddingRequest(BaseModel):
     model: str
