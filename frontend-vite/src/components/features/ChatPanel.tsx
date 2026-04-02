@@ -36,6 +36,8 @@ interface ChatPanelProps {
   chatMaxTokens: number
   chatContextLength: number
   chatThinkingMode: boolean
+  activeScenario: string | null
+  onScenarioSelect: (scenario: string | null) => void
   onTemperatureChange: (value: number) => void
   onMaxTokensChange: (value: number) => void
   onContextLengthChange: (value: number) => void
@@ -63,6 +65,8 @@ export function ChatPanel({
   chatMaxTokens,
   chatContextLength,
   chatThinkingMode,
+  activeScenario,
+  onScenarioSelect,
   onTemperatureChange,
   onMaxTokensChange,
   onContextLengthChange,
@@ -70,14 +74,50 @@ export function ChatPanel({
 }: ChatPanelProps) {
   return (
     <div className="grid gap-6 lg:grid-cols-3">
-      <Card className="lg:col-span-2 bg-slate-800/30 border-slate-700/50 backdrop-blur-sm flex flex-col h-[600px]">
-        <CardHeader className="border-b border-slate-700/50">
-          <CardTitle className="text-white">Chat Interface</CardTitle>
-          <CardDescription className="text-slate-400">
-            Test the proxy with OpenAI-compatible API
-          </CardDescription>
-        </CardHeader>
-        <ScrollArea className="flex-1 p-4">
+        <Card className="lg:col-span-2 bg-slate-800/30 border-slate-700/50 backdrop-blur-sm flex flex-col h-[600px]">
+          <CardHeader className="border-b border-slate-700/50 pb-4">
+            <div className="flex justify-between items-start mb-2">
+              <div>
+                <CardTitle className="text-white">Agentic Control Space</CardTitle>
+                <CardDescription className="text-slate-400 mt-1">
+                  Orchestrate models with specialized capabilities, tools, and context profiles.
+                </CardDescription>
+              </div>
+            </div>
+            
+            {/* Scenario Presets */}
+            <div className="flex flex-wrap gap-2 mt-2">
+              <Badge 
+                variant="outline"
+                className={`cursor-pointer px-3 py-1.5 transition-all ${activeScenario === 'code_assistant' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.2)]' : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
+                onClick={() => onScenarioSelect('code_assistant')}
+              >
+                💻 Code Assistant
+              </Badge>
+              <Badge 
+                variant="outline"
+                className={`cursor-pointer px-3 py-1.5 transition-all ${activeScenario === 'deep_researcher' ? 'bg-purple-500/20 text-purple-400 border-purple-500/50 shadow-[0_0_10px_rgba(168,85,247,0.2)]' : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
+                onClick={() => onScenarioSelect('deep_researcher')}
+              >
+                🔬 Deep Researcher
+              </Badge>
+              <Badge 
+                variant="outline"
+                className={`cursor-pointer px-3 py-1.5 transition-all ${activeScenario === 'data_analyst' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
+                onClick={() => onScenarioSelect('data_analyst')}
+              >
+                📊 Data Analyst
+              </Badge>
+              <Badge 
+                variant="outline"
+                className={`cursor-pointer px-3 py-1.5 transition-all ${activeScenario === 'quick_chat' ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_10px_rgba(245,158,11,0.2)]' : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
+                onClick={() => onScenarioSelect('quick_chat')}
+              >
+                ⚡ Quick Chat
+              </Badge>
+            </div>
+          </CardHeader>
+          <ScrollArea className="flex-1 p-4">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-500">
               <MessageSquare className="w-12 h-12 mb-2" />

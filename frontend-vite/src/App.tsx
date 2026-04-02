@@ -637,6 +637,8 @@ export default function ProxyBridgeDashboard() {
   const [chatContextLength, setChatContextLength] = useState(8192)
   const [chatThinkingMode, setChatThinkingMode] = useState(false)
   const [chatSystemPrompt, setChatSystemPrompt] = useState('')
+  const [chatTools, setChatTools] = useState<any[]>([])
+  const [activeScenario, setActiveScenario] = useState<string | null>(null)
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false)
 
   // Model presets state
@@ -1102,6 +1104,56 @@ export default function ProxyBridgeDashboard() {
   }, [fetchKnowledge, fetchMCPServers, fetchA2AAgents, fetchAsyncTasks, fetchEmbeddingPresets, fetchChatTestPresets, fetchGatewayLog, fetchObservabilityHorizon, fetchObservabilityVRAM, fetchObservabilityHealth, fetchObservabilityConfidence, fetchObservabilityPresetsLineage, fetchObservabilityNarrative, fetchObservabilityNegotiations, fetchObservabilityFailures])
 
   // Send message
+  // Scenario selection logic
+  const handleScenarioSelect = useCallback((scenario: string | null) => {
+    setActiveScenario(scenario)
+    if (!scenario) return
+
+    switch (scenario) {
+      case 'code_assistant':
+        setChatSystemPrompt('You are an expert coding assistant. You can read files and explore directories to understand the codebase. Always provide clear, well-formatted code.')
+        setChatTemperature(0.2)
+        setChatMaxTokens(4096)
+        setChatContextLength(32768)
+        setChatThinkingMode(true)
+        setChatTools([
+          { type: 'function', function: { name: 'file_list', description: 'List files in a directory', parameters: { type: 'object', properties: { path: { type: 'string' } } } } },
+          { type: 'function', function: { name: 'file_read', description: 'Read file contents', parameters: { type: 'object', properties: { path: { type: 'string' } } } } }
+        ])
+        break
+      case 'deep_researcher':
+        setChatSystemPrompt('You are a deep research agent. Use the web search tool to gather information, synthesize findings, and provide comprehensive reports.')
+        setChatTemperature(0.5)
+        setChatMaxTokens(8192)
+        setChatContextLength(128000)
+        setChatThinkingMode(true)
+        setChatTools([
+          { type: 'function', function: { name: 'web_search', description: 'Search the web for information', parameters: { type: 'object', properties: { query: { type: 'string' } } } } }
+        ])
+        break
+      case 'data_analyst':
+        setChatSystemPrompt('You are a data analyst. You can query the knowledge graph to find connections and patterns in the data.')
+        setChatTemperature(0.3)
+        setChatMaxTokens(4096)
+        setChatContextLength(32768)
+        setChatThinkingMode(false)
+        setChatTools([
+          { type: 'function', function: { name: 'query_knowledge_graph', description: 'Query the internal knowledge graph', parameters: { type: 'object', properties: { query: { type: 'string' } } } } }
+        ])
+        break
+      case 'quick_chat':
+        setChatSystemPrompt('You are a fast, helpful assistant. Keep your answers brief, precise, and to the point.')
+        setChatTemperature(0.7)
+        setChatMaxTokens(1024)
+        setChatContextLength(8192)
+        setChatThinkingMode(false)
+        setChatTools([])
+        break
+    }
+    // Show advanced settings to let user see what changed
+    setShowAdvancedSettings(true)
+  }, [])
+
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading || !currentModel) return
     
@@ -1112,7 +1164,8 @@ export default function ProxyBridgeDashboard() {
           temperature: chatTemperature,
           maxTokens: chatMaxTokens,
           contextWindow: chatContextLength,
-          systemMessage: chatSystemPrompt
+          systemMessage: chatSystemPrompt,
+          tools: chatTools
         })
       setInputMessage('')
     } catch (err) {
@@ -3152,11 +3205,47 @@ export default function ProxyBridgeDashboard() {
               <TabsContent value="chat" className="mt-0">
                 <div className="grid gap-6 lg:grid-cols-3">
                   <Card className="lg:col-span-2 bg-slate-800/30 border-slate-700/50 backdrop-blur-sm flex flex-col h-[600px]">
-                    <CardHeader className="border-b border-slate-700/50">
-                      <CardTitle className="text-white">Chat Interface</CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Test the proxy with OpenAI-compatible API
-                      </CardDescription>
+                    <CardHeader className="border-b border-slate-700/50 pb-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <CardTitle className="text-white">Agentic Control Space</CardTitle>
+                          <CardDescription className="text-slate-400 mt-1">
+                            Orchestrate models with specialized capabilities, tools, and context profiles.
+                          </CardDescription>
+                        </div>
+                      </div>
+                      
+                      {/* Scenario Presets */}
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Badge 
+                          variant="outline"
+                          className={`cursor-pointer px-3 py-1.5 transition-all ${activeScenario === 'code_assistant' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.2)]' : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
+                          onClick={() => handleScenarioSelect('code_assistant')}
+                        >
+                          💻 Code Assistant
+                        </Badge>
+                        <Badge 
+                          variant="outline"
+                          className={`cursor-pointer px-3 py-1.5 transition-all ${activeScenario === 'deep_researcher' ? 'bg-purple-500/20 text-purple-400 border-purple-500/50 shadow-[0_0_10px_rgba(168,85,247,0.2)]' : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
+                          onClick={() => handleScenarioSelect('deep_researcher')}
+                        >
+                          🔬 Deep Researcher
+                        </Badge>
+                        <Badge 
+                          variant="outline"
+                          className={`cursor-pointer px-3 py-1.5 transition-all ${activeScenario === 'data_analyst' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
+                          onClick={() => handleScenarioSelect('data_analyst')}
+                        >
+                          📊 Data Analyst
+                        </Badge>
+                        <Badge 
+                          variant="outline"
+                          className={`cursor-pointer px-3 py-1.5 transition-all ${activeScenario === 'quick_chat' ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_10px_rgba(245,158,11,0.2)]' : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:bg-slate-700'}`}
+                          onClick={() => handleScenarioSelect('quick_chat')}
+                        >
+                          ⚡ Quick Chat
+                        </Badge>
+                      </div>
                     </CardHeader>
                     <ScrollArea className="flex-1 p-4">
                       {messages.length === 0 ? (

@@ -22,6 +22,7 @@ class ChatCompletionRequest(BaseModel):
     temperature: Optional[float] = 1.0
     max_tokens: Optional[int] = None
     context_window: Optional[int] = Field(default=16000, alias="contextWindow")
+    tools: Optional[List[Dict[str, Any]]] = None
 
     class Config:
         populate_by_name = True

@@ -15,6 +15,7 @@ export interface UseStatefulChatOptions {
   maxTokens?: number
   contextWindow?: number
   systemMessage?: string
+  tools?: any[]
   store?: boolean
 }
 
@@ -70,6 +71,7 @@ export function useStatefulChat(): UseStatefulChatReturn {
           ...(options?.temperature !== undefined && { temperature: options.temperature }),
           ...(options?.maxTokens !== undefined && { max_tokens: options.maxTokens }),
           ...(options?.contextWindow !== undefined && { contextWindow: options.contextWindow }),
+          ...(options?.tools && options.tools.length > 0 && { tools: options.tools }),
         }
 
         // Call standard chat completions endpoint via proxy
