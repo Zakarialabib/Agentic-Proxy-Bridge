@@ -1421,20 +1421,16 @@ export default function ProxyBridgeDashboard() {
       <nav className="border-b border-slate-700/50 bg-slate-800/30">
         <div className="container mx-auto px-4">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="bg-transparent h-12 p-0 gap-1">
-              {[
-                { value: 'dashboard', icon: Activity, label: 'Dashboard' },
-                { value: 'worklog', icon: BookOpen, label: 'Worklog' },
-                { value: 'gateway', icon: Zap, label: 'Gateway' },
-                { value: 'orchestrate', icon: Sparkles, label: 'Orchestrate' },
-                { value: 'knowledge', icon: Brain, label: 'Knowledge' },
-                { value: 'protocols', icon: Network, label: 'Protocols' },
-                { value: 'tools', icon: Wrench, label: 'Tools' },
-                { value: 'observability', icon: Eye, label: 'Observability' },
-                { value: 'performance', icon: Gauge, label: 'Performance' },
-                { value: 'chat', icon: MessageSquare, label: 'Chat' },
-              ].map(tab => (
-                <TabsTrigger
+            <TabsList className="bg-transparent h-12 p-0 gap-1 overflow-x-auto overflow-y-hidden whitespace-nowrap scrollbar-none flex-nowrap w-full">
+                {[
+                  { value: 'dashboard', icon: Activity, label: 'System Overview' },
+                  { value: 'gateway', icon: Zap, label: 'Embedding & Rerank' },
+                  { value: 'knowledge', icon: Brain, label: 'Context Base' },
+                  { value: 'tools', icon: Wrench, label: 'Agent Skills' },
+                  { value: 'performance', icon: Gauge, label: 'Proxy Telemetry' },
+                  { value: 'chat', icon: MessageSquare, label: 'Control Space' },
+                ].map(tab => (
+                  <TabsTrigger
                   key={tab.value}
                   value={tab.value}
                   className="data-[state=active]:bg-gradient-to-b data-[state=active]:from-cyan-500/20 data-[state=active]:to-emerald-500/10 data-[state=active]:text-cyan-400 data-[state=active]:border-b-2 data-[state=active]:border-cyan-400 data-[state=active]:shadow-lg data-[state=active]:shadow-cyan-500/10 px-4 h-12 rounded-none text-slate-400 hover:text-slate-200 transition-all duration-200"
@@ -1796,15 +1792,15 @@ export default function ProxyBridgeDashboard() {
                   {/* Gateway Search Interface */}
                   <div className="grid gap-6 lg:grid-cols-2">
                     <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
-                      <CardHeader>
-                        <CardTitle className="text-white flex items-center gap-2">
-                          <Zap className="w-5 h-5 text-amber-400" />
-                          Gateway Search
-                        </CardTitle>
-                        <CardDescription className="text-slate-400">
-                          Task-aware preset templates with gateway transformation
-                        </CardDescription>
-                      </CardHeader>
+                        <CardHeader>
+                          <CardTitle className="text-white flex items-center gap-2">
+                            <Zap className="w-5 h-5 text-amber-400" />
+                            Prompt & Embedding Analyzer
+                          </CardTitle>
+                          <CardDescription className="text-slate-400">
+                            Test how the proxy understands and transforms your prompt before hitting the LLM
+                          </CardDescription>
+                        </CardHeader>
                       <CardContent className="space-y-4">
                         <div>
                           <Label className="text-slate-300">Query</Label>
@@ -1882,15 +1878,15 @@ export default function ProxyBridgeDashboard() {
                     
                     {/* Gateway Inspector */}
                     <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
-                      <CardHeader>
-                        <CardTitle className="text-white flex items-center gap-2">
-                          <Terminal className="w-5 h-5 text-cyan-400" />
-                          Gateway Inspector
-                        </CardTitle>
-                        <CardDescription className="text-slate-400">
-                          Input/Output transformation log
-                        </CardDescription>
-                      </CardHeader>
+                        <CardHeader>
+                          <CardTitle className="text-white flex items-center gap-2">
+                            <Terminal className="w-5 h-5 text-cyan-400" />
+                            Analysis & Transformation Pipeline
+                          </CardTitle>
+                          <CardDescription className="text-slate-400">
+                            Input, Intent classification, and Rerank output log
+                          </CardDescription>
+                        </CardHeader>
                       <CardContent>
                         {gatewayResult ? (
                           <div className="space-y-4 text-sm">
@@ -1978,11 +1974,14 @@ export default function ProxyBridgeDashboard() {
                   <div className="grid gap-6 lg:grid-cols-2">
                     <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
                       <CardHeader>
-                        <CardTitle className="text-white flex items-center gap-2">
-                          <Gauge className="w-5 h-5 text-purple-400" />
-                          MRL Dimension Presets
-                        </CardTitle>
-                      </CardHeader>
+                          <CardTitle className="text-white flex items-center gap-2">
+                            <Gauge className="w-5 h-5 text-purple-400" />
+                            Embedding Representation (MRL)
+                          </CardTitle>
+                          <CardDescription className="text-slate-400">
+                            Select dimensionality to balance speed vs. semantic depth
+                          </CardDescription>
+                        </CardHeader>
                       <CardContent>
                         <div className="grid grid-cols-4 gap-2">
                           {Object.entries(mrlPresets).map(([key, preset]) => (
@@ -2036,16 +2035,16 @@ export default function ProxyBridgeDashboard() {
                   </div>
                   
                   {/* Chat Test Presets */}
-                  <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
-                    <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
-                        <Play className="w-5 h-5 text-emerald-400" />
-                        Chat Test Presets
-                      </CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Built-in test suite for model capabilities, performance, and robustness
-                      </CardDescription>
-                    </CardHeader>
+                    <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
+                      <CardHeader>
+                        <CardTitle className="text-white flex items-center gap-2">
+                          <Play className="w-5 h-5 text-emerald-400" />
+                          Scenario Optimization Tests
+                        </CardTitle>
+                        <CardDescription className="text-slate-400">
+                          Automated test suite to evaluate embedding latency, intent routing, and rerank quality
+                        </CardDescription>
+                      </CardHeader>
                     <CardContent>
                       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
                         {chatTestPresets.slice(0, 8).map(preset => (
@@ -2249,14 +2248,14 @@ export default function ProxyBridgeDashboard() {
                 <div className="grid gap-6 lg:grid-cols-2">
                   <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
                     <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
-                        <Search className="w-5 h-5 text-purple-400" />
-                        Query Knowledge Graph
-                      </CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Navigate concepts, not just retrieve text
-                      </CardDescription>
-                    </CardHeader>
+                        <CardTitle className="text-white flex items-center gap-2">
+                          <Search className="w-5 h-5 text-purple-400" />
+                          Explore Context Topology
+                        </CardTitle>
+                        <CardDescription className="text-slate-400">
+                          Navigate the relationships and embeddings currently available for RAG injection
+                        </CardDescription>
+                      </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="flex gap-2">
                         <Input
@@ -2291,14 +2290,14 @@ export default function ProxyBridgeDashboard() {
 
                   <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
                     <CardHeader>
-                      <CardTitle className="text-white flex items-center gap-2">
-                        <BookOpen className="w-5 h-5 text-emerald-400" />
-                        Index Documentation
-                      </CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Transform documentation into active knowledge topology
-                      </CardDescription>
-                    </CardHeader>
+                        <CardTitle className="text-white flex items-center gap-2">
+                          <BookOpen className="w-5 h-5 text-emerald-400" />
+                          Ingest to Context Base
+                        </CardTitle>
+                        <CardDescription className="text-slate-400">
+                          Feed documentation and files into the proxy's active knowledge topology for context augmentation
+                        </CardDescription>
+                      </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="flex gap-2">
                         <div className="flex-1">
@@ -2486,40 +2485,51 @@ export default function ProxyBridgeDashboard() {
               </TabsContent>
 
               {/* Tools Tab */}
+              {/* Tools / Agent Skills Tab */}
               <TabsContent value="tools" className="mt-0">
-                <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
-                  <CardHeader>
-                    <CardTitle className="text-white">Tool Registry</CardTitle>
-                    <CardDescription className="text-slate-400">
-                      {/* {tools.length} tools available across all protocols */}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-[500px]">
-                      <div className="space-y-2">
-                        {/* {tools.map((tool, i) => (
-                          <div key={i} className="p-3 rounded-lg bg-slate-900/50 border border-slate-700">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-medium text-white">{tool.name}</span>
+                <div className="space-y-6">
+                  <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
+                    <CardHeader>
+                      <CardTitle className="text-white flex items-center gap-2">
+                        <Server className="w-5 h-5 text-cyan-400" />
+                        Python Proxy Tools
+                      </CardTitle>
+                      <CardDescription className="text-slate-400">
+                        Native tools executing in the Python FastAPI backend layer to augment LM Studio capabilities.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {[
+                          { name: 'file_list', description: 'Lists all files within a specified local directory. Used by Code Assistant to explore workspaces.', icon: <FileJson className="w-4 h-4 text-cyan-400" />, source: 'python-proxy', safety: 'supervised' },
+                          { name: 'file_read', description: 'Reads the content of a specific file. Used to ingest code or documentation into the context window.', icon: <FileJson className="w-4 h-4 text-cyan-400" />, source: 'python-proxy', safety: 'supervised' },
+                          { name: 'web_search', description: 'Performs a live web search to gather up-to-date information. Used by the Deep Researcher scenario.', icon: <Globe className="w-4 h-4 text-purple-400" />, source: 'python-proxy', safety: 'autonomous' },
+                          { name: 'query_knowledge_graph', description: 'Queries the internal vectorized knowledge graph for entity relationships and context augmentation.', icon: <Database className="w-4 h-4 text-emerald-400" />, source: 'python-proxy', safety: 'autonomous' }
+                        ].map((tool, i) => (
+                          <div key={i} className="p-4 rounded-lg bg-slate-900/50 border border-slate-700/50 hover:border-slate-600 transition-all">
+                            <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
-                                {tool.source && (
-                                  <Badge variant="outline" className={`text-xs ${
-                                    tool.source.startsWith('mcp') ? 'text-cyan-400 border-cyan-500/30' : 'text-slate-400 border-slate-600'
-                                  }`}>
-                                    {tool.source}
-                                  </Badge>
-                                )}
-                                {tool.health && getHealthBadge(tool.health)}
-                                {getSafetyBadge(tool.safety_level)}
+                                {tool.icon}
+                                <span className="font-medium text-white">{tool.name}</span>
                               </div>
+                              <Badge variant="outline" className="text-xs bg-slate-800 text-slate-300 border-slate-600">
+                                {tool.source}
+                              </Badge>
                             </div>
                             <p className="text-sm text-slate-400">{tool.description}</p>
+                            <div className="mt-3">
+                              <Badge className={`text-[10px] uppercase tracking-wider ${
+                                tool.safety === 'autonomous' ? 'bg-emerald-500/20 text-emerald-400 border-0' : 'bg-amber-500/20 text-amber-400 border-0'
+                              }`}>
+                                {tool.safety} execution
+                              </Badge>
+                            </div>
                           </div>
-                        ))} */}
+                        ))}
                       </div>
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </div>
               </TabsContent>
 
               {/* Observability Tab */}
@@ -3196,12 +3206,12 @@ export default function ProxyBridgeDashboard() {
                 </div>
               </TabsContent>
 
-              {/* Performance Tab */}
+              {/* Performance / Proxy Telemetry Tab */}
               <TabsContent value="performance" className="mt-0">
                 <Phase8Dashboard />
               </TabsContent>
 
-              {/* Chat Tab */}
+              {/* Chat / Control Space Tab */}
               <TabsContent value="chat" className="mt-0">
                 <div className="grid gap-6 lg:grid-cols-3">
                   <Card className="lg:col-span-2 bg-slate-800/30 border-slate-700/50 backdrop-blur-sm flex flex-col h-[600px]">
