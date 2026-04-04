@@ -6,7 +6,7 @@ frontend-vite/node_modules/
 frontend-vite/dist/
 frontend-vite/.vite/
 
-mini-services/proxy-bridge/node_modules/
+/proxy-bridge-python/cli/results/data
 
 .opencode/
 .oepncode/
@@ -25,3 +25,4 @@ __pycache__/
 db/
 prisma/dev.db
 dev.db
+*.txt

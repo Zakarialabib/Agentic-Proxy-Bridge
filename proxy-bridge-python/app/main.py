@@ -7,10 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
 
 from app.core.database import init_db
-from app.routers import chat, embeddings, models, agent, worklog, retrieve, presets, observability
+from app.routers import chat, embeddings, models, agent, worklog, retrieve, presets, observability, completions
 from app.routers.hardware import router as hardware_router, _get_cached_hardware
 from app.routers.mcp import router as mcp_router
 from app.routers.ace import router as ace_router
+from app.routers.context import router as context_router
+from app.routers.tools import router as tools_router
 from app.services.pool import connection_pool
 
 logger = structlog.get_logger(__name__)
@@ -68,7 +70,6 @@ metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
 
 app.include_router(models.router)
-app.include_router(models.api_router)
 app.include_router(chat.router)
 app.include_router(embeddings.router)
 app.include_router(agent.router)
@@ -76,7 +77,10 @@ app.include_router(worklog.router)
 app.include_router(hardware_router)
 app.include_router(retrieve.router)
 app.include_router(presets.router)
-app.include_router(observability.router)
+app.include_router(observability.router, prefix="/api/observability", tags=["Observability"])
+app.include_router(completions.router, tags=["Completions"])
+app.include_router(context_router)
+app.include_router(tools_router)
 app.include_router(mcp_router)
 app.include_router(ace_router)
 
