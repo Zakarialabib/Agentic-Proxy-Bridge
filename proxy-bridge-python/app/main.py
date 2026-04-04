@@ -1,167 +1,199 @@
-import contextlib
+import time
+from contextlib import asynccontextmanager
+
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
-from app.routers import models, chat, embeddings, agent, worklog
-from app.services.pool import connection_pool
-from app.core.database import init_db
 
-@contextlib.asynccontextmanager
+from app.core.database import init_db
+from app.routers import chat, embeddings, models, agent, worklog, retrieve, presets, observability
+from app.routers.hardware import router as hardware_router, _get_cached_hardware
+from app.routers.mcp import router as mcp_router
+from app.routers.ace import router as ace_router
+from app.services.pool import connection_pool
+
+logger = structlog.get_logger(__name__)
+
+START_TIME = time.time()
+
+
+@asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Setup resources
     await init_db()
+    logger.info("startup_begin")
+    try:
+        profile = _get_cached_hardware()
+        logger.info(
+            "hardware_detected",
+            platform=profile.platform,
+            cpu_cores=profile.cpu_cores,
+            ram_gb=profile.system_ram_gb,
+            gpu=profile.gpu_name,
+            vram_gb=profile.gpu_vram_gb,
+        )
+    except Exception as e:
+        logger.warning("hardware_detection_failed_on_startup", error=str(e))
+    try:
+        from app.routers.presets import _load_presets_store
+        _load_presets_store()
+        logger.info("presets_loaded")
+    except Exception as e:
+        logger.warning("presets_load_failed", error=str(e))
     yield
-    # Teardown resources
     await connection_pool.close_all()
+    logger.info("shutdown_complete")
+
 
 app = FastAPI(
     title="Proxy Bridge API",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Add prometheus metrics endpoint
 metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
 
-# Include routers
 app.include_router(models.router)
+app.include_router(models.api_router)
 app.include_router(chat.router)
 app.include_router(embeddings.router)
 app.include_router(agent.router)
 app.include_router(worklog.router)
+app.include_router(hardware_router)
+app.include_router(retrieve.router)
+app.include_router(presets.router)
+app.include_router(observability.router)
+app.include_router(mcp_router)
+app.include_router(ace_router)
+
+
+@app.get("/health")
+async def health_check():
+    """Check bridge and LM Studio connectivity."""
+    health = {
+        "status": "ok",
+        "bridge": "running",
+        "lmstudio": "unknown",
+        "uptime_seconds": round(time.time() - START_TIME, 1),
+    }
+    try:
+        from app.adapters.lmstudio import LMStudioAdapter
+        from app.core.settings import settings
+
+        adapter = LMStudioAdapter(base_url=settings.LMSTUDIO_BASE_URL)
+        await adapter.list_models()
+        health["lmstudio"] = "connected"
+        await adapter.close()
+    except Exception as e:
+        health["lmstudio"] = "disconnected"
+        health["lmstudio_error"] = str(e)
+        health["status"] = "degraded"
+    return health
+
 
 @app.get("/status")
-async def get_status():
-    """Compatibility endpoint for the dashboard status check."""
+async def frontend_status():
+    """Frontend-compatible status endpoint matching ProxyStatus type."""
+    from app.adapters.lmstudio import LMStudioAdapter
+    from app.core.settings import settings
+
+    lmstudio_connected = False
+    try:
+        adapter = LMStudioAdapter(base_url=settings.LMSTUDIO_BASE_URL)
+        await adapter.list_models()
+        lmstudio_connected = True
+        await adapter.close()
+    except Exception:
+        pass
+
     return {
-        "status": "connected",
-        "lmstudio_connected": True,
-        "tools_registered": 2,
-        "approval_mode": "supervised",
+        "status": "running" if lmstudio_connected else "degraded",
+        "lmstudio_connected": lmstudio_connected,
+        "tools_registered": 0,
+        "approval_mode": "autonomous",
         "active_sessions": 0,
         "documents_indexed": 0,
         "knowledge_graph": {"nodes": 0, "edges": 0, "documents": {"count": 0}},
         "protocols": {
             "mcp": {"servers": 0, "healthy": 0, "tools": 0},
-            "a2a": {"agents": 0, "available": 0}
+            "a2a": {"agents": 0, "available": 0},
         },
         "async_tasks": {"pending": 0, "total": 0},
         "pre_triggering": {"pre_warmed_tools": 0, "patterns_loaded": 0},
-        "agentic_features": {}
+        "agentic_features": {},
     }
 
-@app.get("/models/available")
-async def get_models_available():
-    """Compatibility endpoint for models/available."""
-    from app.routers.models import list_models
-    models_list = await list_models()
-    return {"models": models_list["data"], "connected": True}
 
-@app.get("/dashboard")
-async def get_dashboard_metrics():
-    """Returns real-time metrics for the Phase 8 dashboard."""
-    from app.services.pool import ACTIVE_CONNECTIONS
-    return {
-        "overall": {"health": "ok", "score": 98},
-        "connectionPool": {
-            "active": ACTIVE_CONNECTIONS._value,
-            "queued": 0,
-            "max": 100,
-            "utilization": ACTIVE_CONNECTIONS._value / 100 * 100,
-            "trends": {"avgUtilization": 5}
+@app.get("/api/status")
+async def system_status():
+    """Full system status: models loaded, VRAM, uptime, hardware."""
+    from app.adapters.lmstudio import LMStudioAdapter
+    from app.core.settings import settings
+
+    status = {
+        "status": "ok",
+        "uptime_seconds": round(time.time() - START_TIME, 1),
+        "hardware": {},
+        "models": {
+            "loaded": [],
+            "loaded_count": 0,
         },
-        "embeddingCoalescer": {
-            "pending": 0,
-            "activeBatches": 0,
-            "avgBatchSize": 0,
-            "deduplicationRate": 0.85
-        },
-        "streaming": {
-            "chunksQueued": 0,
-            "backpressureEvents": 0,
-            "avgLatency": 25
-        },
-        "recommendations": ["System performing optimally on Python engine"]
+        "vram": {},
     }
 
-@app.get("/gateway/log")
-async def get_gateway_log():
-    return {"transformations": []}
+    try:
+        profile = _get_cached_hardware()
+        status["hardware"] = {
+            "platform": profile.platform,
+            "cpu_cores": profile.cpu_cores,
+            "system_ram_gb": profile.system_ram_gb,
+            "gpu_name": profile.gpu_name,
+            "gpu_vram_gb": profile.gpu_vram_gb,
+            "apple_silicon": profile.apple_silicon,
+        }
+        status["vram"] = {
+            "total_gb": profile.gpu_vram_gb or (profile.system_ram_gb * 0.8),
+            "type": "gpu" if profile.gpu_vram_gb else "system_ram",
+        }
+    except Exception as e:
+        logger.warning("hardware_status_failed", error=str(e))
+        status["hardware_error"] = str(e)
 
-@app.get("/observability/health")
-async def get_obs_health():
-    return {"organs": [], "veins": [], "overall_health": 100}
+    lmstudio_connected = False
+    try:
+        adapter = LMStudioAdapter(base_url=settings.LMSTUDIO_BASE_URL)
+        loaded = await adapter.get_loaded_models()
+        status["models"]["loaded"] = [
+            {
+                "id": m.get("id"),
+                "state": m.get("state", "unknown"),
+                "loaded_instances": m.get("loaded_instances", 0),
+            }
+            for m in loaded
+        ]
+        status["models"]["loaded_count"] = len(loaded)
+        lmstudio_connected = True
+        await adapter.close()
+    except Exception as e:
+        logger.warning("lmstudio_status_failed", error=str(e))
+        status["lmstudio_error"] = str(e)
 
-@app.get("/observability/vram")
-async def get_obs_vram():
-    return {"blocks": []}
+    status["lmstudio_connected"] = lmstudio_connected
+    if not lmstudio_connected:
+        status["status"] = "degraded"
 
-@app.get("/knowledge")
-async def get_knowledge():
-    return {"nodes": []}
-
-@app.get("/async/tasks")
-async def get_async_tasks():
-    return {"tasks": []}
-
-@app.get("/mcp/servers")
-async def get_mcp_servers():
-    return {"servers": []}
-
-@app.get("/a2a/agents")
-async def get_a2a_agents():
-    return {"agents": []}
-
-@app.get("/models/loaded")
-async def get_models_loaded():
-    return {"data": [], "count": 0}
-
-@app.get("/settings/presets")
-async def get_settings_presets():
-    return {"presets": []}
-
-@app.get("/presets/embedding")
-async def get_embedding_presets():
-    return {"presets": {}, "mrl_presets": {}, "reranker_configs": {}}
-
-@app.get("/presets/chat-tests")
-async def get_chat_test_presets():
-    return {"presets": []}
-
-@app.get("/observability/horizon")
-async def get_obs_horizon():
-    return {"now": {"alerts": [], "sparklines": [], "hot_channels": []}, "recent": {"trends": [], "patterns": [], "hints": []}, "deep": {"evolution": [], "preset_tree": [], "learned_patterns": []}}
-
-@app.get("/observability/confidence")
-async def get_obs_confidence():
-    return {"points": []}
-
-@app.get("/observability/presets/lineage")
-async def get_obs_lineage():
-    return {"presets": []}
-
-@app.get("/observability/narrative/{session_id}")
-async def get_obs_narrative(session_id: str):
-    return {"session_id": session_id, "current_phase": "idle", "phases": [], "quality_score": 0, "events": []}
-
-@app.get("/observability/negotiations")
-async def get_obs_negotiations():
-    return {"negotiations": []}
-
-@app.get("/observability/failures")
-async def get_obs_failures():
-    return {"failures": []}
-
-@app.get("/health")
-async def health_check():
-    return {"status": "ok"}
+    return status

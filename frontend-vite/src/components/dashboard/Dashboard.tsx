@@ -10,6 +10,8 @@ import {
   Sparkles, Eye, Clock, TrendingUp, Gauge
 } from 'lucide-react'
 import * as api from '@/lib/api'
+import { useSettingsStore } from '@/stores/useSettingsStore'
+import { MetricsDisplay } from '@/components/inference/MetricsDisplay'
 import type { ProxyStatus, PerformanceMetrics, CacheStats } from '@/lib/types'
 
 interface StatusPillProps {
@@ -105,6 +107,9 @@ interface ConnectionMatrixProps {
 }
 
 export function ConnectionMatrix({ status }: ConnectionMatrixProps) {
+  const { lmStudioHost, lmStudioPort } = useSettingsStore()
+  const lmStudioUrl = `http://${lmStudioHost}:${lmStudioPort}`
+  
   return (
     <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
       <CardHeader className="pb-3">
@@ -124,7 +129,7 @@ export function ConnectionMatrix({ status }: ConnectionMatrixProps) {
             )}
           </div>
           <div className="text-xs font-mono text-slate-300 bg-slate-800 px-2 py-1 rounded">
-            http://192.168.1.12:1234
+            {lmStudioUrl}
           </div>
         </div>
         
@@ -353,7 +358,7 @@ export function Dashboard() {
   return (
     <div className="space-y-4">
       <ConnectionMatrix status={status} />
-      <PerformanceCards metrics={metrics} cacheStats={cacheStats} />
+      <MetricsDisplay status={status} performanceMetrics={metrics} cacheStats={cacheStats} />
       <SystemStats status={status} />
       <VRAMDisplay used={8.5} />
     </div>
