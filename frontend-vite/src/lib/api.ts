@@ -27,7 +27,32 @@ import type {
   AppSettings,
   CacheStats,
   PerformanceMetrics,
-  WorklogEntry
+  WorklogEntry,
+  HardwareProfile,
+  ModelRecommendation,
+  PresetConfig,
+  AgentSession,
+  AgentTurn,
+  RetrievalResult,
+  RerankResult,
+  HealthStatus,
+  AnomalyAlert,
+  PerfectionPoint,
+  ToolMetrics,
+  CircuitBreakerState,
+  ResilienceMode,
+  FallbackLevel,
+  CapabilityEnvelope,
+  ProbeResult,
+  PresetLineageNode,
+  PrewarmingMetrics,
+  TruncationPattern,
+  RerankerStats,
+  StreamingMode,
+  VisionCapability,
+  ACIDSession,
+  SSEChannel,
+  ScoredChunk
 } from './types'
 
 const BASE_URL = '' // Use relative paths for Vite proxy
@@ -177,17 +202,251 @@ export async function fetchLoadedModels(): Promise<{ data: { instance_id: string
   return fetchProxy<{ data: any[]; count: number }>('/models/loaded')
 }
 
-export async function loadModel(modelKey: string, contextLength = 8192): Promise<{ instance_id: string; type: string; load_time_seconds: number; status: string } | null> {
+export async function loadModel(modelId: string, config?: { context_length?: number; gpu_layers?: number; tensor_split?: number[] }): Promise<{ instance_id: string; type: string; load_time_seconds: number; status: string } | null> {
   return fetchProxy('/models/load', {
     method: 'POST',
-    body: JSON.stringify({ model: modelKey, context_length: contextLength }),
+    body: JSON.stringify({ model: modelId, ...config }),
   })
 }
 
-export async function unloadModel(instanceId: string): Promise<{ instance_id: string; status: string } | null> {
+export async function unloadModel(modelId: string): Promise<{ instance_id: string; status: string } | null> {
   return fetchProxy('/models/unload', {
     method: 'POST',
-    body: JSON.stringify({ instance_id: instanceId }),
+    body: JSON.stringify({ model: modelId }),
+  })
+}
+
+export async function getModelStats(modelId: string): Promise<{ model_id: string; memory_usage_mb: number; tokens_processed: number; avg_tps: number; uptime_seconds: number; requests_total: number } | null> {
+  return fetchProxy(`/models/stats/${encodeURIComponent(modelId)}`)
+}
+
+// Hardware
+export async function fetchHardwareProfile(): Promise<HardwareProfile | null> {
+  return fetchProxy<HardwareProfile>('/hardware/profile')
+}
+
+export async function fetchRecommendations(): Promise<ModelRecommendation[] | null> {
+  const data = await fetchProxy<{ recommendations: ModelRecommendation[] }>('/hardware/recommendations')
+  return data?.recommendations ?? null
+}
+
+// Retrieval
+export async function retrieveDocuments(
+  query: string,
+  docs: string[],
+  config: { top_k?: number; min_score?: number; retrieval_method?: 'dense' | 'sparse' | 'hybrid' }
+): Promise<RetrievalResult | null> {
+  return fetchProxy('/retrieval/documents', {
+    method: 'POST',
+    body: JSON.stringify({ query, docs, config }),
+  })
+}
+
+export async function rerankChunks(
+  query: string,
+  chunks: string[],
+  topK = 5
+): Promise<RerankResult | null> {
+  return fetchProxy('/retrieval/rerank', {
+    method: 'POST',
+    body: JSON.stringify({ query, chunks, top_k: topK }),
+  })
+}
+
+// Agent
+export async function createAgentSession(
+  workflow: string,
+  model: string
+): Promise<AgentSession | null> {
+  return fetchProxy('/agent/sessions', {
+    method: 'POST',
+    body: JSON.stringify({ workflow, model }),
+  })
+}
+
+export async function executeAgentTurn(
+  sessionId: string,
+  input: string
+): Promise<AgentTurn | null> {
+  return fetchProxy(`/agent/sessions/${encodeURIComponent(sessionId)}/turns`, {
+    method: 'POST',
+    body: JSON.stringify({ input }),
+  })
+}
+
+export async function getAgentSession(id: string): Promise<AgentSession | null> {
+  return fetchProxy(`/agent/sessions/${encodeURIComponent(id)}`)
+}
+
+export async function branchSession(
+  sessionId: string,
+  fromCheckpoint: string
+): Promise<AgentSession | null> {
+  return fetchProxy(`/agent/sessions/${encodeURIComponent(sessionId)}/branch`, {
+    method: 'POST',
+    body: JSON.stringify({ from_checkpoint: fromCheckpoint }),
+  })
+}
+
+// ACE
+export async function generateACE(body: Record<string, unknown>): Promise<{ session_id: string; trace_id: string; status: string } | null> {
+  return fetchProxy('/ace/generate', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function traceACE(sessionId: string): Promise<{ session_id: string; events: unknown[]; duration_ms: number } | null> {
+  return fetchProxy(`/ace/trace/${encodeURIComponent(sessionId)}`)
+}
+
+// Presets
+export async function generatePreset(modelId: string, useCase: string): Promise<PresetConfig | null> {
+  return fetchProxy('/presets/generate', {
+    method: 'POST',
+    body: JSON.stringify({ model_id: modelId, use_case: useCase }),
+  })
+}
+
+export async function listPresets(): Promise<PresetConfig[] | null> {
+  const data = await fetchProxy<{ presets: PresetConfig[] }>('/presets')
+  return data?.presets ?? null
+}
+
+export async function applyPreset(id: string): Promise<{ success: boolean; applied_config: PresetConfig } | null> {
+  return fetchProxy(`/presets/${encodeURIComponent(id)}/apply`, {
+    method: 'POST',
+  })
+}
+
+export async function deletePreset(id: string): Promise<boolean | null> {
+  return fetchProxy(`/presets/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+// Observability
+export async function fetchObservabilityHealth(): Promise<HealthStatus | null> {
+  return fetchProxy('/observability/health')
+}
+
+export async function fetchObservabilityAnalytics(tool?: string): Promise<ToolMetrics[] | null> {
+  const endpoint = tool
+    ? `/observability/analytics/${encodeURIComponent(tool)}`
+    : '/observability/analytics'
+  const data = await fetchProxy<{ metrics: ToolMetrics[] }>(endpoint)
+  return data?.metrics ?? null
+}
+
+export async function fetchObservabilityPerfection(): Promise<PerfectionPoint[] | null> {
+  const data = await fetchProxy<{ points: PerfectionPoint[] }>('/observability/perfection')
+  return data?.points ?? null
+}
+
+export async function fetchObservabilityAlerts(): Promise<AnomalyAlert[] | null> {
+  const data = await fetchProxy<{ alerts: AnomalyAlert[] }>('/observability/alerts')
+  return data?.alerts ?? null
+}
+
+export async function fetchObservabilityReports(type?: string): Promise<Record<string, unknown>[] | null> {
+  const endpoint = type
+    ? `/observability/reports/${encodeURIComponent(type)}`
+    : '/observability/reports'
+  const data = await fetchProxy<{ reports: Record<string, unknown>[] }>(endpoint)
+  return data?.reports ?? null
+}
+
+export async function fetchObservabilityRegressions(): Promise<{ regressions: { tool: string; metric: string; before: number; after: number; severity: string }[] } | null> {
+  return fetchProxy('/observability/regressions')
+}
+
+export async function fetchObservabilityProbing(): Promise<ProbeResult[] | null> {
+  const data = await fetchProxy<{ probes: ProbeResult[] }>('/observability/probing')
+  return data?.probes ?? null
+}
+
+export async function fetchObservabilitySharding(): Promise<{ shards: { id: string; size: number; models: string[]; vram_mb: number }[] } | null> {
+  return fetchProxy('/observability/sharding')
+}
+
+export async function fetchObservabilityPrewarming(): Promise<PrewarmingMetrics | null> {
+  return fetchProxy('/observability/prewarming')
+}
+
+export async function fetchObservabilityTruncation(): Promise<TruncationPattern[] | null> {
+  const data = await fetchProxy<{ patterns: TruncationPattern[] }>('/observability/truncation')
+  return data?.patterns ?? null
+}
+
+export async function fetchObservabilityReranker(): Promise<RerankerStats | null> {
+  return fetchProxy('/observability/reranker')
+}
+
+export async function fetchObservabilityVRAM(): Promise<VRAMTetrisBlock[] | null> {
+  const data = await fetchProxy<{ blocks: VRAMTetrisBlock[] }>('/observability/vram')
+  return data?.blocks ?? null
+}
+
+export async function fetchObservabilityPresets(): Promise<PresetLineageNode[] | null> {
+  const data = await fetchProxy<{ lineage: PresetLineageNode[] }>('/observability/presets')
+  return data?.lineage ?? null
+}
+
+export async function fetchObservabilityStreaming(): Promise<StreamingMode | null> {
+  return fetchProxy('/observability/streaming')
+}
+
+export async function fetchObservabilityVision(): Promise<VisionCapability | null> {
+  return fetchProxy('/observability/vision')
+}
+
+export async function fetchObservabilityResilience(): Promise<ResilienceMode | null> {
+  return fetchProxy('/observability/resilience')
+}
+
+export async function fetchObservabilityHorizon(): Promise<ThreeTimeHorizon | null> {
+  return fetchProxy('/observability/horizon')
+}
+
+export async function fetchObservabilityConfidence(): Promise<ConfidencePoint[] | null> {
+  const data = await fetchProxy<{ points: ConfidencePoint[] }>('/observability/confidence')
+  return data?.points ?? null
+}
+
+export async function fetchObservabilityPresetsLineage(): Promise<PresetNode[] | null> {
+  const data = await fetchProxy<{ presets: PresetNode[] }>('/observability/presets/lineage')
+  return data?.presets ?? null
+}
+
+export async function fetchObservabilityNarrative(sessionId: string): Promise<SessionNarrative | null> {
+  return fetchProxy(`/observability/narrative/${sessionId}`)
+}
+
+export async function fetchObservabilityNegotiations(): Promise<Negotiation[] | null> {
+  const data = await fetchProxy<{ negotiations: Negotiation[] }>('/observability/negotiations')
+  return data?.negotiations ?? null
+}
+
+export async function fetchObservabilityFailures(): Promise<FailureRecord[] | null> {
+  const data = await fetchProxy<{ failures: FailureRecord[] }>('/observability/failures')
+  return data?.failures ?? null
+}
+
+// SSE
+export async function createSSEConnection(channel: string): Promise<SSEChannel | null> {
+  return fetchProxy('/sse/connect', {
+    method: 'POST',
+    body: JSON.stringify({ channel }),
+  })
+}
+
+// MCP
+export async function listMCPTools(): Promise<{ tools: Tool[] } | null> {
+  return fetchProxy('/mcp/tools')
+}
+
+export async function callMCPTool(name: string, args: Record<string, unknown>): Promise<{ result: unknown; duration_ms: number; success: boolean } | null> {
+  return fetchProxy('/mcp/tools/call', {
+    method: 'POST',
+    body: JSON.stringify({ name, args }),
   })
 }
 
@@ -290,44 +549,6 @@ export async function runChatTest(presetId: string): Promise<any | null> {
 export async function fetchGatewayLog(): Promise<GatewayTransformation[] | null> {
   const data = await fetchProxy<{ transformations: GatewayTransformation[] }>('/gateway/log')
   return data?.transformations ?? null
-}
-
-// Observability
-export async function fetchObservabilityHorizon(): Promise<ThreeTimeHorizon | null> {
-  return fetchProxy('/observability/horizon')
-}
-
-export async function fetchObservabilityVRAM(): Promise<VRAMTetrisBlock[] | null> {
-  const data = await fetchProxy<{ blocks: VRAMTetrisBlock[] }>('/observability/vram')
-  return data?.blocks ?? null
-}
-
-export async function fetchObservabilityHealth(): Promise<HealthOrganism | null> {
-  return fetchProxy('/observability/health')
-}
-
-export async function fetchObservabilityConfidence(): Promise<ConfidencePoint[] | null> {
-  const data = await fetchProxy<{ points: ConfidencePoint[] }>('/observability/confidence')
-  return data?.points ?? null
-}
-
-export async function fetchObservabilityPresetsLineage(): Promise<PresetNode[] | null> {
-  const data = await fetchProxy<{ presets: PresetNode[] }>('/observability/presets/lineage')
-  return data?.presets ?? null
-}
-
-export async function fetchObservabilityNarrative(sessionId: string): Promise<SessionNarrative | null> {
-  return fetchProxy(`/observability/narrative/${sessionId}`)
-}
-
-export async function fetchObservabilityNegotiations(): Promise<Negotiation[] | null> {
-  const data = await fetchProxy<{ negotiations: Negotiation[] }>('/observability/negotiations')
-  return data?.negotiations ?? null
-}
-
-export async function fetchObservabilityFailures(): Promise<FailureRecord[] | null> {
-  const data = await fetchProxy<{ failures: FailureRecord[] }>('/observability/failures')
-  return data?.failures ?? null
 }
 
 // Settings
@@ -481,4 +702,3 @@ export async function orchestrate(
     }),
   })
 }
-
