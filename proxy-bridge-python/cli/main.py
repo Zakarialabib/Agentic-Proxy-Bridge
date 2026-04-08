@@ -430,6 +430,10 @@ def prove(base_url: str, model: str, trajectory: bool):
              p1_tcr = p1_results.get("trajectory", {}).get("tcr", 0)
              p2_tcr = p2_results.get("trajectory", {}).get("tcr", 0)
              table.add_row("Trajectory TCR", f"{p1_tcr*100:.0f}%", f"{p2_tcr*100:.0f}%", f"+{(p2_tcr-p1_tcr)*100:.0f}% completion")
+             
+             p1_fail = p1_results.get("trajectory", {}).get("dominant_failure", "None")
+             p2_fail = p2_results.get("trajectory", {}).get("dominant_failure", "None")
+             table.add_row("Dominant Failure", str(p1_fail), str(p2_fail), "Fixed" if p1_fail != "None" and p2_fail == "None" else "Persistent")
 
         console.print("\n", table)
         

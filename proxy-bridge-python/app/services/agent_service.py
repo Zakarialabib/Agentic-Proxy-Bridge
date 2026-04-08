@@ -90,7 +90,17 @@ async def intercept_and_execute_tools(
             if is_tool_call_mode:
                 # NeMo-Style Guardrail Validation
                 is_valid, tool_data, parse_error = validator.validate_tool_call(tool_call_buffer)
-                tool_call_content = tool_call_buffer # Keep raw content for history
+                
+                # --- Breadcrumb Pattern (Extract <think> blocks) ---
+                breadcrumb = None
+                tool_call_content = tool_call_buffer
+                think_match = re.search(r"<think>([\s\S]*?)</think>", tool_call_buffer)
+                if think_match:
+                    breadcrumb = think_match.group(1).strip()
+                    # Strip <think> block from the VRAM context to save tokens on subsequent hops
+                    tool_call_content = re.sub(r"<think>[\s\S]*?</think>", "", tool_call_buffer).strip()
+                    print(f"[Agentic Bridge] Breadcrumb extracted: {len(breadcrumb)} chars saved from GPU context.")
+                # ---------------------------------------------------
                 
                 if tool_data and isinstance(tool_data, dict) and tool_data.get("name"):
                     tool_name = tool_data["name"]
@@ -120,11 +130,19 @@ async def intercept_and_execute_tools(
                     })
                 else:
                     # JSON parsing failed or missing name, inject error and retry
-                    error_msg = error_msg or "Invalid tool call format. Expected JSON with a 'name' field."
+                    error_msg = parse_error or "Invalid tool call format. Expected JSON with a 'name' field."
                     current_messages.append({"role": "assistant", "content": tool_call_content})
+                    
+                    # --- Breadcrumb Reinjection ---
+                    reinject_str = ""
+                    if breadcrumb:
+                        reinject_str = f"Previously, you thought: '{breadcrumb[:500]}...'\n"
+                        print("[Agentic Bridge] Reinjecting breadcrumb due to failure.")
+                    # ------------------------------
+
                     current_messages.append({
                         "role": "user",
-                        "content": f"System Error: Failed to parse tool call JSON. {error_msg}. Please fix the JSON syntax and try again using strict <tool_call> tags."
+                        "content": f"System Error: Failed to parse tool call JSON. {error_msg}. {reinject_str}Please fix the JSON syntax and try again using strict <tool_call> tags."
                     })
                     
                     # Force JSON mode on the next attempt to guarantee structural compliance
@@ -133,6 +151,15 @@ async def intercept_and_execute_tools(
                 # Retry logic for both success (continue agent loop) and failure (fix JSON)
                 from app.services.context_builder import enforce_context_window
                 
+                # --- Semantic Context Pruning ---
+                try:
+                    from app.services.context_pruner import semantic_prune_context
+                    current_goal = messages[0].get("content", "") if messages else "Use tools correctly."
+                    current_messages = await semantic_prune_context(current_messages, current_goal, threshold=0.6)
+                except Exception as e:
+                    print(f"[Agentic Bridge] Semantic pruning skipped: {e}")
+                # --------------------------------
+
                 # Compress older context if approaching limits, preserving headroom for tools
                 max_tokens = original_payload.get("max_tokens") or 8192
                 follow_up_payload = {**original_payload, "messages": enforce_context_window(current_messages, max_tokens)}
@@ -175,6 +202,27 @@ async def intercept_and_execute_tools(
                         follow_up_payload["model"] = fallback_model
                 # --------------------------
                 
+                # --- Cognitive Mode Switch ---
+                # Router Mode: Simple tool selection (Hop 1)
+                # Reasoning Mode: Deep thought (Hop 2+)
+                is_router_mode = (recursive_hops < 2)
+                
+                sys_msg_idx = next((i for i, m in enumerate(follow_up_payload["messages"]) if m["role"] == "system"), None)
+                if sys_msg_idx is not None:
+                    base_sys = follow_up_payload["messages"][sys_msg_idx]["content"]
+                    # Strip previous mode instructions
+                    base_sys = re.sub(r"\[COGNITIVE MODE: .*?\]\n", "", base_sys)
+                    
+                    if is_router_mode:
+                        follow_up_payload["messages"][sys_msg_idx]["content"] = "[COGNITIVE MODE: ROUTER]\nPick exactly one tool to use next. Do not provide any explanations or <think> blocks. Output only the tool call.\n" + base_sys
+                        follow_up_payload["max_tokens"] = min(follow_up_payload.get("max_tokens", 2048), 512)
+                        print(f"[Agentic Bridge] Switching to ROUTER MODE (Hop {recursive_hops})")
+                    else:
+                        follow_up_payload["messages"][sys_msg_idx]["content"] = "[COGNITIVE MODE: REASONING]\nThink step-by-step using <think> blocks before acting. Evaluate the previous tool results carefully.\n" + base_sys
+                        follow_up_payload["max_tokens"] = max(follow_up_payload.get("max_tokens", 2048), 2048)
+                        print(f"[Agentic Bridge] Switching to REASONING MODE (Hop {recursive_hops})")
+                # -----------------------------
+
                 client = connection_pool.get_client("openai")
                 headers = {"Content-Type": "application/json"}
                 
