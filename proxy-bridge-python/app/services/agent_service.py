@@ -110,7 +110,7 @@ async def intercept_and_execute_tools(
                     })
                 else:
                     # JSON parsing failed or missing name, inject error and retry
-                    error_msg = parse_error or "Invalid tool call format. Expected JSON with a 'name' field."
+                    error_msg = error_msg or "Invalid tool call format. Expected JSON with a 'name' field."
                     current_messages.append({"role": "assistant", "content": tool_call_content})
                     current_messages.append({
                         "role": "user",
@@ -127,6 +127,10 @@ async def intercept_and_execute_tools(
                 max_tokens = original_payload.get("max_tokens") or 8192
                 follow_up_payload = {**original_payload, "messages": enforce_context_window(current_messages, max_tokens)}
                 
+                if force_json_mode:
+                    follow_up_payload["response_format"] = {"type": "json_object"}
+                    # Lower temperature for constrained decoding to reduce entropy and improve speed
+                    follow_up_payload["temperature"] = min(follow_up_payload.get("temperature", 0.1), 0.1)
                 # --- Cognition Sharding ---
                 # If we're deep in a multi-turn reasoning loop, escalate to a more capable model
                 if recursive_hops >= 3:

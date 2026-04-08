@@ -38,6 +38,8 @@ class ToolRegistry:
     def register(self, tool: ToolDefinition):
         """Register a tool definition."""
         self._tools[tool.name] = tool
+        # In a real LM Studio integration, we would push this schema to the LM Studio native ToolUseClient here.
+        # e.g., lmstudio_client.register_tool({"type": "function", "function": {"name": tool.name, ...}})
 
     def unregister(self, name: str):
         """Unregister a tool by name."""
