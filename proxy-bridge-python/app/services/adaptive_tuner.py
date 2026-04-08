@@ -44,14 +44,15 @@ class AdaptiveTuner:
         
         print(f"[AdaptiveTuner] Complex results: {tps} TPS, Efficiency: {efficiency}")
 
-        # Heuristic 4: Throughput-based tiering
-        if tps < 5 and tps > 0:
-            msg = f"Low throughput ({tps} TPS) detected. Optimizing quantization."
+        # Heuristic 4: Throughput-based tiering (Updated for realistic limits)
+        if tps < 10 and tps > 0:
+            msg = f"Low throughput ({tps} TPS) detected. Optimizing quantization and context constraints."
             rationales.append(msg)
             print(f"[AdaptiveTuner] {msg}")
             for p in updated_presets.get("presets", []):
-                p["params"]["quantization_target"] = "Q3_K_M"
-                p["description"] += " (Optimized for low TPS)"
+                p["params"]["quantization_target"] = "Q4_K_S" if tps > 5 else "Q3_K_M"
+                p["params"]["context_window"] = min(p["params"].get("context_window", 4096), 4096)
+                p["description"] += f" (Optimized for low TPS: {tps})"
 
         return updated_presets, rationales
 
@@ -110,20 +111,43 @@ class AdaptiveTuner:
         Creates a hardware-aware initial preset.
         """
         vram = self.hardware.gpu_vram_gb or 0
+        gpu_name = (self.hardware.gpu_name or "").lower()
         
+        # Detect older bandwidth-constrained architectures
+        is_pre_volta = any(arch in gpu_name for arch in ["m4000", "k80", "gtx 9", "gtx 10", "titan x", "p40", "m6000"])
+        
+        # If VRAM detection failed but GPU exists, fallback to system RAM estimate
+        if vram == 0 and gpu_name:
+            vram = (self.hardware.system_ram_gb or 0) * 0.75
+            
         # Conservative defaults
         context_window = 4096
         gpu_offload = 0.0
+        quantization_target = "Q4_K_M"
         
-        if vram > 12:
-            context_window = 32768
-            gpu_offload = 1.0
-        elif vram > 7:
-            context_window = 8192
-            gpu_offload = 0.8
-        elif vram > 3:
-            context_window = 4096
-            gpu_offload = 0.5
+        if is_pre_volta:
+            # Pre-Volta architecture constraints (Bandwidth bottlenecked)
+            context_window = min(4096, context_window)
+            gpu_offload = min(0.8, vram / 16.0)
+            if vram <= 8:
+                quantization_target = "Q3_K_M"
+            else:
+                quantization_target = "Q4_K_S"
+            description = f"Auto-tuned for {self.hardware.gpu_name} (Legacy Arch Constraint)"
+        else:
+            if vram > 12:
+                context_window = 32768
+                gpu_offload = 1.0
+                quantization_target = "Q6_K"
+            elif vram > 7:
+                context_window = 8192
+                gpu_offload = 0.8
+                quantization_target = "Q5_K_M"
+            elif vram > 3:
+                context_window = 4096
+                gpu_offload = 0.5
+                quantization_target = "Q4_K_M"
+            description = f"Auto-tuned for {self.hardware.gpu_name or 'CPU'}"
             
         return {
             "name": f"Turbo-{model_id}",
@@ -133,9 +157,10 @@ class AdaptiveTuner:
                 "top_p": 0.9,
                 "max_tokens": 2048,
                 "context_window": context_window,
-                "gpu_offload": gpu_offload
+                "gpu_offload": gpu_offload,
+                "quantization_target": quantization_target
             },
-            "description": f"Auto-tuned for {self.hardware.gpu_name or 'CPU'}"
+            "description": description
         }
 
 tuner = AdaptiveTuner({}) # Placeholder initialization
