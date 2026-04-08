@@ -31,15 +31,23 @@ interface ChatPanelProps {
   showAdvancedSettings: boolean
   onShowAdvancedSettings: (show: boolean) => void
   chatTemperature: number
+  chatTopP: number
+  chatMinP: number
+  chatRepeatPenalty: number
   chatMaxTokens: number
   chatContextLength: number
   chatThinkingMode: boolean
+  systemPrompt: string
   activeScenario: string | null
   onScenarioSelect: (scenario: string | null) => void
   onTemperatureChange: (value: number) => void
+  onTopPChange: (value: number) => void
+  onMinPChange: (value: number) => void
+  onRepeatPenaltyChange: (value: number) => void
   onMaxTokensChange: (value: number) => void
   onContextLengthChange: (value: number) => void
   onThinkingModeChange: (enabled: boolean) => void
+  onSystemPromptChange: (value: string) => void
 }
 
 export function ChatPanel({
@@ -60,15 +68,23 @@ export function ChatPanel({
   showAdvancedSettings,
   onShowAdvancedSettings,
   chatTemperature,
+  chatTopP,
+  chatMinP,
+  chatRepeatPenalty,
   chatMaxTokens,
   chatContextLength,
   chatThinkingMode,
+  systemPrompt,
   activeScenario,
   onScenarioSelect,
   onTemperatureChange,
+  onTopPChange,
+  onMinPChange,
+  onRepeatPenaltyChange,
   onMaxTokensChange,
   onContextLengthChange,
   onThinkingModeChange,
+  onSystemPromptChange,
 }: ChatPanelProps) {
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -134,13 +150,21 @@ export function ChatPanel({
           showAdvancedSettings={showAdvancedSettings}
           onShowAdvancedSettings={onShowAdvancedSettings}
           chatTemperature={chatTemperature}
+          chatTopP={chatTopP}
+          chatMinP={chatMinP}
+          chatRepeatPenalty={chatRepeatPenalty}
           chatMaxTokens={chatMaxTokens}
           chatContextLength={chatContextLength}
           chatThinkingMode={chatThinkingMode}
+          systemPrompt={systemPrompt}
           onTemperatureChange={onTemperatureChange}
+          onTopPChange={onTopPChange}
+          onMinPChange={onMinPChange}
+          onRepeatPenaltyChange={onRepeatPenaltyChange}
           onMaxTokensChange={onMaxTokensChange}
           onContextLengthChange={onContextLengthChange}
           onThinkingModeChange={onThinkingModeChange}
+          onSystemPromptChange={onSystemPromptChange}
         />
       </Card>
 

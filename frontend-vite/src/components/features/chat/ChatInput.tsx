@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
@@ -25,13 +26,21 @@ interface ChatInputProps {
   showAdvancedSettings: boolean
   onShowAdvancedSettings: (show: boolean) => void
   chatTemperature: number
+  chatTopP: number
+  chatMinP: number
+  chatRepeatPenalty: number
   chatMaxTokens: number
   chatContextLength: number
   chatThinkingMode: boolean
+  systemPrompt: string
   onTemperatureChange: (value: number) => void
+  onTopPChange: (value: number) => void
+  onMinPChange: (value: number) => void
+  onRepeatPenaltyChange: (value: number) => void
   onMaxTokensChange: (value: number) => void
   onContextLengthChange: (value: number) => void
   onThinkingModeChange: (enabled: boolean) => void
+  onSystemPromptChange: (value: string) => void
 }
 
 export function ChatInput({
@@ -50,13 +59,21 @@ export function ChatInput({
   showAdvancedSettings,
   onShowAdvancedSettings,
   chatTemperature,
+  chatTopP,
+  chatMinP,
+  chatRepeatPenalty,
   chatMaxTokens,
   chatContextLength,
   chatThinkingMode,
+  systemPrompt,
   onTemperatureChange,
+  onTopPChange,
+  onMinPChange,
+  onRepeatPenaltyChange,
   onMaxTokensChange,
   onContextLengthChange,
   onThinkingModeChange,
+  onSystemPromptChange,
 }: ChatInputProps) {
   return (
     <div className="p-4 border-t border-slate-700/50">
@@ -122,13 +139,49 @@ export function ChatInput({
 
       {showAdvancedSettings && (
         <div className="mb-3 p-3 rounded-lg bg-slate-900/50 border border-slate-700 space-y-3">
-          <div className="grid grid-cols-3 gap-3">
+          <div>
+            <Label className="text-xs text-slate-400">System Prompt</Label>
+            <Textarea
+              value={systemPrompt}
+              onChange={(e) => onSystemPromptChange(e.target.value)}
+              placeholder="You are a helpful assistant... (e.g., You are a specialized reasoning Qwen model...)"
+              className="mt-1 bg-slate-800 border-slate-600 text-white text-xs min-h-[80px]"
+            />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
               <Label className="text-xs text-slate-400">Temperature: {chatTemperature}</Label>
               <Slider
                 value={[chatTemperature]}
                 onValueChange={([v]) => onTemperatureChange(v)}
                 min={0} max={2} step={0.1}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-400">Top P: {chatTopP}</Label>
+              <Slider
+                value={[chatTopP]}
+                onValueChange={([v]) => onTopPChange(v)}
+                min={0} max={1} step={0.05}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-400">Min P: {chatMinP}</Label>
+              <Slider
+                value={[chatMinP]}
+                onValueChange={([v]) => onMinPChange(v)}
+                min={0} max={1} step={0.01}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-400">Rep Penalty: {chatRepeatPenalty}</Label>
+              <Slider
+                value={[chatRepeatPenalty]}
+                onValueChange={([v]) => onRepeatPenaltyChange(v)}
+                min={1} max={2} step={0.05}
                 className="mt-1"
               />
             </div>
@@ -172,6 +225,8 @@ export function ChatInput({
       <div className="flex items-center gap-2 mb-2 text-xs text-slate-500">
         {chatThinkingMode && <Badge className="bg-purple-500/20 text-purple-400 border-0 text-[10px]">THINK</Badge>}
         <span>temp:{chatTemperature}</span>
+        <span>top_p:{chatTopP}</span>
+        <span>min_p:{chatMinP}</span>
         <span>ctx:{chatContextLength >= 1024 ? `${chatContextLength/1024}K` : chatContextLength}</span>
         <span>max:{chatMaxTokens}</span>
       </div>
