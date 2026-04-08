@@ -143,6 +143,10 @@ async def intercept_and_execute_tools(
                     # Strip <think> block from the VRAM context to save tokens on subsequent hops
                     tool_call_content = re.sub(r"<think>[\s\S]*?</think>", "", tool_call_buffer).strip()
                     print(f"[Agentic Bridge] Breadcrumb extracted: {len(breadcrumb)} chars saved from GPU context.")
+                    
+                    # Yield telemetry event
+                    telemetry = {"type": "telemetry", "event": "breadcrumb", "details": f"Extracted {len(breadcrumb)} chars of reasoning to save VRAM."}
+                    yield f"data: {json.dumps(telemetry)}\n\n".encode("utf-8")
                 # ---------------------------------------------------
                 
                 if tool_data and isinstance(tool_data, dict) and tool_data.get("name"):
@@ -161,6 +165,8 @@ async def intercept_and_execute_tools(
                         if len(result_str) > 500 and recursive_hops >= 2:
                             model_id = original_payload.get("model", "qwen3.5-4b")
                             content_val = await _compress_tool_result(result_str, tool_name, model_id)
+                            telemetry = {"type": "telemetry", "event": "compression", "details": f"Compressed tool payload ({len(result_str)} chars) to prevent context pollution."}
+                            yield f"data: {json.dumps(telemetry)}\n\n".encode("utf-8")
                         elif len(result_str) > 1500:
                             # Fallback truncation if not compressed
                             content_val = result_str[:1500] + f"\n\n... [ToolResult truncated. {len(result_str) - 1500} chars omitted to save context memory.]"
@@ -184,6 +190,8 @@ async def intercept_and_execute_tools(
                     # Do NOT append the hallucinated output or the error message to the context history.
                     # We treat the context like a database transaction and rollback to keep the KV cache pure.
                     print(f"[Agentic Bridge] Rollback Point triggered: Discarding invalid JSON to preserve KV cache. Error: {error_msg}")
+                    telemetry = {"type": "telemetry", "event": "rollback", "details": f"Tool error intercepted. Rolling back KV Cache to prevent pollution. ({error_msg})"}
+                    yield f"data: {json.dumps(telemetry)}\n\n".encode("utf-8")
                     # ------------------------------------------------------
                     
                     # --- Breadcrumb Reinjection ---
@@ -271,10 +279,14 @@ async def intercept_and_execute_tools(
                         follow_up_payload["messages"][sys_msg_idx]["content"] = "[COGNITIVE MODE: ROUTER]\nPick exactly one tool to use next. Do not provide any explanations or <think> blocks. Output only the tool call.\n" + base_sys
                         follow_up_payload["max_tokens"] = min(follow_up_payload.get("max_tokens", 2048), 512)
                         print(f"[Agentic Bridge] Switching to ROUTER MODE (Hop {recursive_hops})")
+                        telemetry = {"type": "telemetry", "event": "mode_switch", "details": f"Hop {recursive_hops}: Switching to ROUTER MODE. Freezing deep layers to save VRAM."}
+                        yield f"data: {json.dumps(telemetry)}\n\n".encode("utf-8")
                     else:
                         follow_up_payload["messages"][sys_msg_idx]["content"] = "[COGNITIVE MODE: REASONING]\nThink step-by-step using <think> blocks before acting. Evaluate the previous tool results carefully.\n" + base_sys
                         follow_up_payload["max_tokens"] = max(follow_up_payload.get("max_tokens", 2048), 2048)
                         print(f"[Agentic Bridge] Switching to REASONING MODE (Hop {recursive_hops})")
+                        telemetry = {"type": "telemetry", "event": "mode_switch", "details": f"Hop {recursive_hops}: Switching to REASONING MODE. Thawing deep layers for complex thought."}
+                        yield f"data: {json.dumps(telemetry)}\n\n".encode("utf-8")
                 # -----------------------------
 
                 client = connection_pool.get_client("openai")

@@ -168,10 +168,10 @@ export function KnowledgePanel({
           </div>
           <Button 
             onClick={onIndexSubmit}
-            disabled={!indexDocument.trim() && !indexFile && !indexUrl.trim()}
+            disabled={(!indexDocument.trim() && !indexFile && !indexUrl.trim()) || isIndexing}
             className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30"
           >
-            <Database className="w-4 h-4 mr-2" />
+            {isIndexing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Database className="w-4 h-4 mr-2" />}
             {isIndexing ? 'Indexing...' : 'Index Document'}
           </Button>
           

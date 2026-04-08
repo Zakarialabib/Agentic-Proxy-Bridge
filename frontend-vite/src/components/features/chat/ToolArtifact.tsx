@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
-import { Globe, Calculator, FileText, Database, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react'
+import { Globe, Calculator, FileText, Database, ChevronDown, ChevronUp, CheckCircle, Minimize2 } from 'lucide-react'
 
 interface ToolArtifactProps {
   toolName: string
@@ -12,6 +12,8 @@ interface ToolArtifactProps {
 
 export function ToolArtifact({ toolName, toolContent, isCall }: ToolArtifactProps) {
   const [isOpen, setIsOpen] = useState(!isCall) // Open responses by default, close calls
+  
+  const isCompressed = toolContent.includes('[COMPRESSED SUMMARY]')
 
   const getToolConfig = () => {
     switch (toolName) {
@@ -51,6 +53,12 @@ export function ToolArtifact({ toolName, toolContent, isCall }: ToolArtifactProp
             <span className="text-sm font-medium text-slate-200">
               {isCall ? `Using Tool: ${config.label}` : `Result: ${config.label}`}
             </span>
+            {isCompressed && (
+              <span className="ml-2 inline-flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/30">
+                <Minimize2 className="w-3 h-3" />
+                Summarized
+              </span>
+            )}
           </div>
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-slate-700/50">

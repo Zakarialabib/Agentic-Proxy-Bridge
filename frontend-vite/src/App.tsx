@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
 import { useSystemStatusData } from '@/hooks/use-system-status'
+import { useObservability } from '@/hooks/use-observability'
+import { useToolsData } from '@/hooks/use-tools-data'
+import { useWorklogs } from '@/hooks/use-worklogs'
+import { useGateway } from '@/hooks/use-gateway'
+import { useKnowledge } from '@/hooks/use-knowledge'
+import { useProtocols } from '@/hooks/use-protocols'
+import { useOrchestrate } from '@/hooks/use-orchestrate'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { useChatStore } from '@/stores/useChatStore'
 import { Header } from '@/components/layout/Header'
@@ -63,6 +70,13 @@ export default function App() {
   const { status, tools, availableModels, loadedModels, loadModel, unloadModel } = useSystemStatusData()
   const { activeTab, setActiveTab, theme } = useSettingsStore()
   const chatStore = useChatStore()
+  const { dashboard: obsDashboard, health: obsHealth } = useObservability()
+  const { tools: agentTools } = useToolsData()
+  const { worklogs } = useWorklogs()
+  const { gateway } = useGateway()
+  const { knowledge } = useKnowledge()
+  const { protocols } = useProtocols()
+  const { agents } = useOrchestrate()
   const [uptime, setUptime] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<'connection' | 'proxy' | 'retrieval' | 'vram' | 'export'>('connection')
@@ -163,16 +177,16 @@ export default function App() {
       case 'dashboard':
         return <ErrorBoundary><DashboardPanel /></ErrorBoundary>
       case 'worklog':
-        return <ErrorBoundary><WorklogPanel entries={[]} /></ErrorBoundary>
+        return <ErrorBoundary><WorklogPanel entries={worklogs} /></ErrorBoundary>
       case 'gateway':
         return <ErrorBoundary><GatewayPanel
           gatewayQuery=""
           onQueryChange={() => {}}
           onSearch={() => {}}
-          embeddingPresets={{}}
-          mrlPresets={{}}
-          rerankerConfigs={{}}
-          chatTestPresets={[]}
+          embeddingPresets={gateway?.embeddingPresets || {}}
+          mrlPresets={gateway?.mrlPresets || {}}
+          rerankerConfigs={gateway?.rerankerConfigs || {}}
+          chatTestPresets={gateway?.chatTestPresets || []}
           gatewayResult={null}
           selectedPreset=""
           selectedMRL=""
@@ -185,14 +199,14 @@ export default function App() {
           onRunTest={() => {}}
         /></ErrorBoundary>
       case 'orchestrate':
-        return <ErrorBoundary><OrchestratePanel tools={tools ?? []} agents={[]} /></ErrorBoundary>
+        return <ErrorBoundary><OrchestratePanel tools={agentTools || []} agents={agents || []} /></ErrorBoundary>
       case 'knowledge':
         return <ErrorBoundary><KnowledgePanel
           status={status ?? null}
           knowledgeQuery=""
           onQueryChange={() => {}}
           onQuerySubmit={() => {}}
-          knowledgeResults={null}
+          knowledgeResults={knowledge?.results || null}
           indexDocument=""
           onIndexDocumentChange={() => {}}
           indexUrl=""
@@ -205,29 +219,23 @@ export default function App() {
           onFetchUrl={() => {}}
         /></ErrorBoundary>
       case 'protocols':
-        const mcpServers = status?.protocols?.mcp ? [{
-          name: 'Local Bridge',
-          transport: 'stdio',
-          tools_count: status.protocols.mcp.tools,
-          health: 'healthy'
-        }] : []
         return <ErrorBoundary><ProtocolsPanel 
-          mcpServers={mcpServers} 
-          a2aAgents={[]} 
-          asyncTasks={[]} 
+          mcpServers={protocols?.mcpServers || []} 
+          a2aAgents={protocols?.a2aAgents || []} 
+          asyncTasks={protocols?.asyncTasks || []} 
         /></ErrorBoundary>
       case 'tools':
-        return <ErrorBoundary><ToolsPanel tools={tools ?? []} /></ErrorBoundary>
+        return <ErrorBoundary><ToolsPanel tools={agentTools || []} /></ErrorBoundary>
       case 'observability':
         return <ErrorBoundary><ObservabilityPanel
           vramTetris={[]}
-          threeTimeHorizon={null}
-          healthOrganism={null}
+          threeTimeHorizon={obsDashboard?.connectionPool || null}
+          healthOrganism={obsHealth?.overall || null}
           confidencePoints={[]}
           presetLineage={[]}
-          sessionNarrative={null}
+          sessionNarrative={obsDashboard?.overall || null}
           negotiations={[]}
-          failures={[]}
+          failures={obsDashboard?.recommendations || []}
         /></ErrorBoundary>
       case 'chat':
         return <ErrorBoundary><ChatPanel
