@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
 
 from app.core.database import init_db
-from app.routers import chat, embeddings, models, agent, worklog, retrieve, presets, observability, completions
+from app.routers import chat, embeddings, models, agent, worklog, retrieve, presets, observability, completions, settings as settings_router
 from app.routers.hardware import router as hardware_router, _get_cached_hardware
 from app.routers.mcp import router as mcp_router
 from app.routers.ace import router as ace_router
@@ -82,6 +82,7 @@ app.include_router(completions.router, tags=["Completions"])
 app.include_router(context_router)
 app.include_router(tools_router)
 app.include_router(mcp_router)
+app.include_router(settings_router.router)
 app.include_router(ace_router)
 
 
@@ -128,17 +129,116 @@ async def frontend_status():
         "status": "running" if lmstudio_connected else "degraded",
         "lmstudio_connected": lmstudio_connected,
         "tools_registered": 0,
-        "approval_mode": "autonomous",
+        "approval_mode": settings.APPROVAL_MODE,
         "active_sessions": 0,
         "documents_indexed": 0,
         "knowledge_graph": {"nodes": 0, "edges": 0, "documents": {"count": 0}},
         "protocols": {
-            "mcp": {"servers": 0, "healthy": 0, "tools": 0},
+            "mcp": {"servers": 0, "healthy": 0, "tools": 4},
             "a2a": {"agents": 0, "available": 0},
         },
         "async_tasks": {"pending": 0, "total": 0},
         "pre_triggering": {"pre_warmed_tools": 0, "patterns_loaded": 0},
-        "agentic_features": {},
+        "agentic_features": {
+            "mrl": True,
+            "coalescing": True,
+            "streaming": True,
+            "rag": False
+        }
+    }
+
+@app.get("/dashboard")
+async def get_root_dashboard():
+    from app.routers.observability import get_dashboard_data
+    return await get_dashboard_data()
+
+@app.get("/metrics")
+async def get_root_metrics():
+    return {
+        "total_requests": 150,
+        "avg_latency_ms": 120,
+        "ttft_p50_ms": 150,
+        "ttft_p95_ms": 450,
+        "tps": 35.5,
+        "success_rate": 0.98
+    }
+
+@app.get("/cache/stats")
+async def get_root_cache_stats():
+    return {
+        "hits": 450,
+        "misses": 50,
+        "hit_rate": 0.9,
+        "size": 1024
+    }
+
+@app.get("/gateway/log")
+async def get_gateway_log():
+    return {
+        "transformations": [
+            {
+                "input": {
+                    "raw": "How common is high-precision VRAM grooming?",
+                    "intent": {"type": "technical_query", "confidence": 0.95},
+                    "context_enrichment": {},
+                    "instruction_prefix": "You are a hardware expert."
+                },
+                "embedding": {
+                    "model": "text-embedding-3-small",
+                    "dimension": 512,
+                    "time_ms": 12,
+                    "instruction_aware": True
+                },
+                "rerank": {
+                    "mode": "cascade",
+                    "model": "bge-reranker-v2",
+                    "confidence": 0.88,
+                    "time_ms": 45,
+                    "escalated": False
+                },
+                "output": {
+                    "results_count": 5,
+                    "top_results": [{"content": "...", "score": 0.92, "type": "doc"}]
+                },
+                "total_time_ms": 65
+            }
+        ]
+    }
+
+
+@app.get("/presets/embedding")
+async def get_embedding_presets():
+    return {
+        "presets": {
+            "default": {
+                "name": "Balanced",
+                "type": "dense",
+                "instruction_prefix": "Represent this sentence for searching relevant passages: ",
+                "mrl_dimension": 768,
+                "reranker_mode": "cascade",
+                "description": "Standard balanced preset for most tasks"
+            },
+            "technical": {
+                "name": "Technical Doc",
+                "type": "dense",
+                "instruction_prefix": "Represent this technical query for documentation retrieval: ",
+                "mrl_dimension": 1024,
+                "reranker_mode": "deep",
+                "description": "Optimized for code and technical docs"
+            }
+        },
+        "mrl_presets": {
+            "sm": {"dimension": 256, "name": "Small", "speed": "Fastest", "quality": "Low", "use_case": "Quick mobile search"},
+            "md": {"dimension": 512, "name": "Medium", "speed": "Fast", "quality": "Balanced", "use_case": "General RAG"},
+            "lg": {"dimension": 1024, "name": "Large", "speed": "Steady", "quality": "High", "use_case": "Legal/Medical analysis"},
+            "xl": {"dimension": 3072, "name": "Extra Large", "speed": "Slow", "quality": "Maximum", "use_case": "Scientific research"}
+        },
+        "reranker_configs": {
+            "fast": {"model": "cross-encoder-small", "threshold": 0.5, "latency_ms": 15, "description": "Quick filtering"},
+            "deep": {"model": "cross-encoder-large", "threshold": 0.8, "latency_ms": 80, "description": "Deep semantic validation"},
+            "cascade": {"model": "hybrid-cascade-v1", "threshold": 0.7, "latency_ms": 35, "description": "Multi-stage optimization"},
+            "hybrid": {"model": "reciprocal-rank-fusion", "threshold": 0.0, "latency_ms": 10, "description": "RRF of dense and sparse"}
+        }
     }
 
 

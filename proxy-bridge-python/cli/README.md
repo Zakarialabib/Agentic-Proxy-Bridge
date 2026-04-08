@@ -45,9 +45,9 @@ python -m cli.main --help
 
 | Command | Description |
 |---------|-------------|
-| `simple` | Simple API tests (health, models, chat) |
-| `medium` | Medium complexity tests (context, prompts, few-shot) |
-| `complex` | Hardware-aware tests with spend tracking |
+| `simple` | Simple API tests (health, models, chat) + **Autotune** |
+| `medium` | Medium complexity tests (context, prompts, few-shot) + **Autotune** |
+| `complex` | Hardware-aware tests with spend tracking + **Autotune** |
 | `preset` | Auto-detect hardware and generate optimal presets |
 | `git-workflow` | AI-powered commit, review, and PR generation |
 | `run-tests` | Targeted tests (proxy, frontend, or full stack) |
@@ -71,6 +71,20 @@ The menu provides:
 - Live results tables
 - Test history browsing
 
+### Adaptive Intelligence (Auto-Tune)
+
+The CLI now supports automated performance optimization via the `--autotune` flag. This flag connects the test results directly to the Proxy Bridge's diagnostic tuner.
+
+```bash
+# Example: Run simple tests and automatically optimize bridge config
+lmstudio-test simple --model qwen3.5-4b --autotune
+```
+
+**What it does:**
+1.  **Analyzes Errors**: Detects 500 errors (often VRAM overflow) and lowers `context_window` presets.
+2.  **Monitors Latency**: If inference speed (TPS) is low, it suggests better quantization tiers.
+3.  **Validates Compliance**: If OpenAI format checks fail, it enables "Strict Mode" for the Unified Normalizer.
+
 ### Simple Tests
 
 Basic API connectivity and compatibility:
@@ -79,8 +93,8 @@ Basic API connectivity and compatibility:
 # Health, models, OpenAI compat (no model needed)
 lmstudio-test simple
 
-# Include chat tests (requires model)
-lmstudio-test simple --model qwen3.5-4b
+# Include chat tests and auto-tune
+lmstudio-test simple --model qwen3.5-4b --autotune
 
 # Interactive mode
 lmstudio-test simple -i
@@ -100,7 +114,7 @@ Tests run:
 Prompt and context engineering:
 
 ```bash
-lmstudio-test medium --model qwen3.5-4b
+lmstudio-test medium --model qwen3.5-4b --autotune
 ```
 
 Tests run:
@@ -116,8 +130,8 @@ Hardware-aware adaptation and spend tracking:
 # Detect hardware, generate presets, run benchmarks
 lmstudio-test complex
 
-# With specific model for benchmarking
-lmstudio-test complex --model qwen3.5-4b
+# With specific model for benchmarking and auto-tune
+lmstudio-test complex --model qwen3.5-4b --autotune
 ```
 
 Tests run:
@@ -231,15 +245,16 @@ Results are stored in `cli/results/data/` as JSON files with:
 ```
 CLI (click + rich TUI)
   -> Proxy Bridge (port 3001)
+    [Unified Normalizer] -> (Enforces OpenAI strictness)
+    [Adaptive Tuner]     -> (Optimizes presets based on CLI results)
     -> LM Studio (port 1234)
 
 Test Tiers:
   Simple   -> Health, models, API compatibility, chat
   Medium   -> Context window, system prompts, few-shot
-  Complex  -> Hardware detection, presets, spend tracking
+  Complex  -> Hardware detection, presets, benchmark (TPS tracking)
 
-Runners:
-  Proxy only   -> Endpoint coverage, error resilience
-  Frontend only -> Accessibility, API routes
-  Full stack   -> E2E connectivity, CORS
+Intelligence Core:
+  Auto-Tune -> Closed-loop optimization from CLI benchmarks
+  Precision -> VRAM-aware context scaling and tier fallback
 ```

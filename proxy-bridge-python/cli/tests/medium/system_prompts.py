@@ -50,39 +50,47 @@ async def run_system_prompt_tests(base_url: str, model: str) -> dict:
     return results
 
 
-async def _send_chat(base_url: str, model: str, messages: list[dict], max_tokens: int = 100, timeout: float = 30.0) -> dict:
-    """Send a chat completion request and return parsed response."""
+async def _send_chat(base_url: str, model: str, messages: list[dict], max_tokens: int = 100, timeout: float = 60.0) -> dict:
+    """Send a chat completion request and return parsed response with real-time feedback."""
+    from rich.live import Live
+    from rich.spinner import Spinner
+    
     start = time.time()
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(
-                f"{base_url}/v1/chat/completions",
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "stream": False,
-                    "max_tokens": max_tokens,
-                },
-            )
-            duration_ms = (time.time() - start) * 1000
+    with Live(Spinner("dots", text=f" Assistant thinking (model={model})..."), refresh_per_second=10, transient=True):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(
+                    f"{base_url}/v1/chat/completions",
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        "stream": False,
+                        "max_tokens": max_tokens,
+                    },
+                )
+                duration_ms = (time.time() - start) * 1000
 
-            if resp.status_code == 200:
-                data = resp.json()
-                choice = data.get("choices", [{}])[0]
-                content = choice.get("message", {}).get("content", "")
-                usage = data.get("usage", {})
-                return {
-                    "ok": True,
-                    "content": content[:200],
-                    "latency_ms": round(duration_ms, 2),
-                    "prompt_tokens": usage.get("prompt_tokens", 0),
-                    "completion_tokens": usage.get("completion_tokens", 0),
-                    "total_tokens": usage.get("total_tokens", 0),
-                    "finish_reason": choice.get("finish_reason", ""),
-                }
-            return {"ok": False, "status_code": resp.status_code, "latency_ms": round(duration_ms, 2)}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choices = data.get("choices", [])
+                    if not choices:
+                        return {"ok": False, "error": "No choices returned in response", "latency_ms": round(duration_ms, 2)}
+                    
+                    choice = choices[0]
+                    content = choice.get("message", {}).get("content", "")
+                    usage = data.get("usage", {})
+                    return {
+                        "ok": True,
+                        "content": content,
+                        "latency_ms": round(duration_ms, 2),
+                        "prompt_tokens": usage.get("prompt_tokens", 0),
+                        "completion_tokens": usage.get("completion_tokens", 0),
+                        "total_tokens": usage.get("total_tokens", 0),
+                        "finish_reason": choice.get("finish_reason", ""),
+                    }
+                return {"ok": False, "status_code": resp.status_code, "latency_ms": round(duration_ms, 2), "error": resp.text}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
 
 async def _test_basic_system_prompt(base_url: str, model: str) -> dict:

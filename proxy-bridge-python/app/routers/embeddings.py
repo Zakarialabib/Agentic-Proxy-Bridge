@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from app.schemas import EmbeddingRequest
 from app.services.coalescer import embedding_coalescer
 
@@ -38,7 +39,11 @@ async def create_embedding(request: EmbeddingRequest):
                         "embedding": emb
                     } for i, emb in enumerate(embeddings)
                 ],
-                "model": request.model
+                "model": request.model,
+                "usage": {"prompt_tokens": 0, "total_tokens": 0}
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"message": str(e), "type": "server_error"}}
+        )

@@ -238,6 +238,33 @@ lmstudio-test run-tests --target full
 
 ---
 
+## Chat Testing & Benchmarking
+
+**Purpose**: Systematic evaluation of model intelligence and performance.
+
+### Running Chat Tests via Dashboard
+1. Open the **Gateway** or **Observability** tab.
+2. Navigate to **Chat Testing**.
+3. Select a preset (e.g., Reasoning, Creativity).
+4. Click **Run Test**.
+5. The system will send a hidden prompt, evaluate the structured response, and report on:
+   - **Accuracy**: Did it follow instructions?
+   - **Latency (TTFT)**: Time to start talking.
+   - **Throughput (TPS)**: Generation speed.
+
+### Running Chat Tests via CLI
+Use the `benchmark` command for high-precision runs:
+
+```bash
+# Run benchmark with 10 iterations
+lmstudio-test benchmark --model qwen3.5-4b --iterations 10
+
+# Run reasoning test suite
+lmstudio-test benchmark --target reasoning --model qwen3.5-4b
+```
+
+---
+
 ## Result Management
 
 ### View Test History

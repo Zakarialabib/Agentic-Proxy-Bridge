@@ -157,7 +157,42 @@ Open http://localhost:5173
 
 ---
 
-## Workflow 6: Agent Skills (Tool Registry)
+## Workflow 6: Auto Tune & Performance
+
+**Purpose**: Automatically optimize model parameters based on your hardware.
+
+### Using Auto Tune
+1. Navigate to **Dashboard** or **Presets**
+2. Click the **Auto Tune** button
+3. The bridge analyzes your GPU (VRAM) and CPU
+4. It calculates optimal:
+   - GPU layers (offloading)
+   - Context window size
+   - Batch size
+5. Apply the generated configuration to your active model
+
+---
+
+## Workflow 7: Chat Testing & Benchmarking
+
+**Purpose**: Systematic testing of model capabilities.
+
+### Running a Chat Test
+1. Navigate to **Observability** or use the **Chat Testing** tab
+2. Select a test suite:
+   - **Reasoning**: Logics and math tests
+   - **Creativity**: Storytelling and metaphor tests
+   - **Instruction Following**: Complex multi-step instructions
+3. Click **Run Test**
+4. View real-time metrics:
+   - Tokens per second (TPS)
+   - Time to first token (TTFT)
+   - Total latency
+5. Export results for comparison
+
+---
+
+## Workflow 8: Agent Skills (Tool Registry)
 
 **Purpose**: Monitor and manage the tool execution layer.
 

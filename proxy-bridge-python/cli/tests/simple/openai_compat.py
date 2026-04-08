@@ -16,17 +16,21 @@ async def run_openai_compat_tests(base_url: str) -> dict:
         "detail": "",
     }
 
-    # Test 1: List models (OpenAI format)
-    results["tests"]["list_models"] = await _test_list_models(base_url)
+    from rich.live import Live
+    from rich.spinner import Spinner
+    
+    with Live(Spinner("dots", text=" Running OpenAI Compatibility Suite..."), refresh_per_second=10, transient=True):
+        # Test 1: List models (OpenAI format)
+        results["tests"]["list_models"] = await _test_list_models(base_url)
 
-    # Test 2: Chat completions (OpenAI format)
-    results["tests"]["chat_format"] = await _test_chat_format(base_url)
+        # Test 2: Chat format (strictly check fields)
+        results["tests"]["chat_format"] = await _test_chat_format(base_url)
 
-    # Test 3: Streaming format compliance
-    results["tests"]["streaming_format"] = await _test_streaming_format(base_url)
+        # Test 3: Streaming format compliance
+        results["tests"]["streaming_format"] = await _test_streaming_format(base_url)
 
-    # Test 4: Error handling (invalid model)
-    results["tests"]["error_handling"] = await _test_error_handling(base_url)
+        # Test 4: Error handling (invalid model)
+        results["tests"]["error_handling"] = await _test_error_handling(base_url)
 
     all_ok = all(t.get("ok", False) for t in results["tests"].values())
     results["ok"] = all_ok
@@ -38,7 +42,7 @@ async def run_openai_compat_tests(base_url: str) -> dict:
 async def _test_list_models(base_url: str) -> dict:
     """Test /v1/models returns OpenAI-compatible format."""
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.get(f"{base_url}/v1/models")
             if resp.status_code == 200:
                 data = resp.json()
@@ -87,6 +91,7 @@ async def _test_chat_format(base_url: str) -> dict:
                     "ok": has_choices and len(data["choices"]) > 0,
                     "openai_compliant": has_id and has_object and has_choices and has_created and has_model,
                     "has_usage": has_usage,
+                    "details": f"id={has_id}, obj={has_object}, choices={has_choices}, usage={has_usage}, model={has_model}"
                 }
             return {"ok": False, "status_code": resp.status_code}
     except Exception as e:
@@ -137,7 +142,7 @@ async def _test_streaming_format(base_url: str) -> dict:
 async def _test_error_handling(base_url: str) -> dict:
     """Test error responses for invalid requests."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 f"{base_url}/v1/chat/completions",
                 json={

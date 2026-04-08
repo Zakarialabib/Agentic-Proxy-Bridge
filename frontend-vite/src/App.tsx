@@ -205,7 +205,17 @@ export default function App() {
           onFetchUrl={() => {}}
         /></ErrorBoundary>
       case 'protocols':
-        return <ErrorBoundary><ProtocolsPanel mcpServers={[]} a2aAgents={[]} asyncTasks={[]} /></ErrorBoundary>
+        const mcpServers = status?.protocols?.mcp ? [{
+          name: 'Local Bridge',
+          transport: 'stdio',
+          tools_count: status.protocols.mcp.tools,
+          health: 'healthy'
+        }] : []
+        return <ErrorBoundary><ProtocolsPanel 
+          mcpServers={mcpServers} 
+          a2aAgents={[]} 
+          asyncTasks={[]} 
+        /></ErrorBoundary>
       case 'tools':
         return <ErrorBoundary><ToolsPanel tools={tools ?? []} /></ErrorBoundary>
       case 'observability':

@@ -1,10 +1,11 @@
 from typing import List, Dict, Any
 
 def estimate_tokens(text: str) -> int:
-    """Rough token estimation (approx 4 chars per token)"""
+    """Rough token estimation (approx 3.5 chars per token for safer budget + padding)"""
     if not text:
         return 0
-    return len(text) // 4
+    # Use 3.5 instead of 4 to be slightly more conservative with budget
+    return int(len(str(text)) / 3.5) + 1
 
 def enforce_context_window(messages: List[Dict[str, Any]], max_tokens: int = 16000) -> List[Dict[str, Any]]:
     """
@@ -25,9 +26,11 @@ def enforce_context_window(messages: List[Dict[str, Any]], max_tokens: int = 160
     system_tokens = estimate_tokens(system_msg.get("content", "")) if system_msg else 0
     
     # Process from newest to oldest
-    budget = max_tokens - system_tokens - 500  # 500 buffer for completion/safety
-    if budget <= 0:
-        budget = 1000  # fallback minimum
+    # Increase safety buffer for local models which might have jitter in context length
+    budget = max_tokens - system_tokens - 1000  
+    if budget < 2000:
+        # Guarantee at least some room for the user query, even if we have to squeeze
+        budget = 2000
         
     retained_msgs = []
     current_tokens = 0

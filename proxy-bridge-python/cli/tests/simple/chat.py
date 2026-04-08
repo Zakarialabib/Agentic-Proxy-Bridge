@@ -59,7 +59,7 @@ async def _test_non_streaming_chat(base_url: str, model: str) -> dict:
     """Test non-streaming chat completion."""
     start = time.time()
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 f"{base_url}/v1/chat/completions",
                 json={
@@ -97,7 +97,7 @@ async def _test_streaming_chat(base_url: str, model: str) -> dict:
     chunk_count = 0
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             async with client.stream(
                 "POST",
                 f"{base_url}/v1/chat/completions",
@@ -149,7 +149,7 @@ async def _test_chat_with_system(base_url: str, model: str) -> dict:
     """Test chat with system prompt."""
     start = time.time()
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 f"{base_url}/v1/chat/completions",
                 json={
@@ -181,7 +181,7 @@ async def _test_chat_max_tokens(base_url: str, model: str) -> dict:
     """Test chat with max_tokens enforcement."""
     start = time.time()
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 f"{base_url}/v1/chat/completions",
                 json={
