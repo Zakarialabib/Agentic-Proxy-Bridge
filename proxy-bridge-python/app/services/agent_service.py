@@ -21,8 +21,18 @@ async def intercept_and_execute_tools(
     current_response = initial_response
     current_messages = list(messages)
     recursive_hops = 0
-    
+
+    from app.services.context_manager import context_controller
+
     while recursive_hops < MAX_REACT_STEPS:
+        # Before each hop, adjust context based on accumulated tool payload
+        tool_results_size = sum(
+            len(msg.get("content", "")) 
+            for msg in current_messages 
+            if msg.get("role") == "user" and "<tool_response>" in msg.get("content", "")
+        )
+        await context_controller.adjust_for_trajectory(recursive_hops, tool_results_size)
+
         recursive_hops += 1
         is_tool_call_mode = False
         tool_call_buffer = ""
@@ -131,6 +141,29 @@ async def intercept_and_execute_tools(
                     follow_up_payload["response_format"] = {"type": "json_object"}
                     # Lower temperature for constrained decoding to reduce entropy and improve speed
                     follow_up_payload["temperature"] = min(follow_up_payload.get("temperature", 0.1), 0.1)
+
+                    # --- GBNF Grammar Injection ---
+                    # Extract the intended tool name from the failed buffer
+                    import re
+                    name_match = re.search(r'"name"\s*:\s*"([^"]+)"', tool_call_buffer)
+                    if name_match:
+                        intended_tool_name = name_match.group(1)
+                        # Find the schema for the intended tool in the original payload
+                        available_tools = original_payload.get("tools", [])
+                        expected_tool = None
+                        for t in available_tools:
+                            if t.get("function", {}).get("name") == intended_tool_name:
+                                expected_tool = t.get("function")
+                                break
+                        
+                        if expected_tool:
+                            try:
+                                from app.guardrails.grammar_builder import generate_tool_call_grammar
+                                follow_up_payload["grammar"] = generate_tool_call_grammar(expected_tool)
+                                print(f"[Agentic Bridge] GBNF grammar injected for tool: {intended_tool_name}")
+                            except ImportError:
+                                pass
+                    # ------------------------------
                 # --- Cognition Sharding ---
                 # If we're deep in a multi-turn reasoning loop, escalate to a more capable model
                 if recursive_hops >= 3:

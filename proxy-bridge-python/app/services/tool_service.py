@@ -36,10 +36,35 @@ class ToolRegistry:
         self._call_history: List[Dict[str, Any]] = []
 
     def register(self, tool: ToolDefinition):
-        """Register a tool definition."""
+        """Register a tool definition and sync with native LM Studio Tool Registry."""
         self._tools[tool.name] = tool
-        # In a real LM Studio integration, we would push this schema to the LM Studio native ToolUseClient here.
-        # e.g., lmstudio_client.register_tool({"type": "function", "function": {"name": tool.name, ...}})
+        
+        # Async push to LM Studio's native tool ecosystem
+        try:
+            import httpx
+            import threading
+            
+            def _sync_tool():
+                try:
+                    from app.core.settings import settings
+                    base_url = settings.lm_studio_base_url
+                    payload = {
+                        "type": "function",
+                        "function": {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameters": tool.parameters
+                        }
+                    }
+                    # Fire and forget
+                    httpx.post(f"{base_url}/v0/tools/register", json=payload, timeout=2.0)
+                    print(f"[Native Tool Registry] Synced tool '{tool.name}' to LM Studio")
+                except Exception:
+                    pass
+            
+            threading.Thread(target=_sync_tool, daemon=True).start()
+        except Exception:
+            pass
 
     def unregister(self, name: str):
         """Unregister a tool by name."""
