@@ -1,6 +1,6 @@
 # LMStudio Test CLI
 
-Interactive CLI testing and benchmarking tool for LMStudio proxy bridge.
+Interactive CLI testing and benchmarking tool for the LMStudio proxy bridge. This tool acts as the validation layer for our Agentic Architecture, providing empirical evidence of how LLMs behave under multi-turn tool calling, context pressure, and hardware constraints.
 
 ## Installation
 
@@ -15,21 +15,31 @@ Or install dependencies manually:
 pip install click rich httpx
 ```
 
-## Prerequisites
+## Agentic Architecture Insights
 
-The CLI requires the proxy bridge to be running. Start it before running tests:
+The CLI is not just a unit tester; it's a diagnostic tool that reveals the fundamental realities of running LLMs for agentic purposes (e.g., tool calling, MCPs, JSON schemas). 
 
-```bash
-cd proxy-bridge-python
-uvicorn app.main:app --host 0.0.0.0 --port 3001
-```
+### The Immutable Model Problem
+A core tension in adaptive LLM infrastructure is the boundary between **runtime parameters** (temperature, top_p, repetition penalty) and **load-time constants** (quantization, context window, GPU layers). 
+While the proxy bridge can dynamically adjust prompts and sampling settings on the fly, a model's weights and memory allocations are locked in VRAM once loaded by LM Studio. You cannot magically make a 4B parameter model smarter or faster simply by tweaking a system prompt if it is bottlenecked by its quantization or context allocation.
 
-For full testing (chat, benchmarks), LM Studio must also be running with a model loaded:
+### The Detection vs Reality Gap
+Hardware autodetection often fails to capture silicon realities. For example, an NVIDIA Quadro M4000 (Maxwell architecture) might be detected as a "HIGH" tier GPU because it has access to 12.7GB of effective system RAM. However, running an 8k context window on an M4000 yields a painful 7.8 tokens/sec due to severe memory bandwidth bottlenecks.
+The CLI's `complex` benchmark exposes this gap, allowing the proxy's `AdaptiveTuner` to override naive VRAM heuristics and cap context limits or downgrade quantization specifically for older architectures.
 
-1. Open LM Studio and start the local server (default port 1234)
-2. Load a model in LM Studio
-3. Start the proxy bridge (port 3001)
-4. Run CLI tests
+### What `prove` Actually Validates
+When running the closed-loop `prove` command, the goal is not to test if the hardware physically transformed between Pass 1 and Pass 2. Instead, it validates:
+1. **Context Strategy (Runtime):** Does compressing older conversation turns preserve enough token headroom for tool execution without causing context overflow?
+2. **Tool Schema Reliability (Request-Time):** If Pass 1 fails JSON format compliance, does injecting strict grammar instructions and validation loops in Pass 2 result in a valid structured output?
+3. **Hardware-Induced Degradation (Infrastructure):** Does the model degrade into repetition loops when the KV cache fills up?
+
+### Agentic Bridge Implications
+Because models are immutable at runtime, the proxy bridge must act as an **active load balancer** rather than a passive translator. If the CLI tests prove a model cannot handle multi-turn context (e.g., `multi_turn_persistence: false`), the bridge must:
+- **Shard the Cognition:** Route fast, single-turn tool selections to small models (e.g., Qwen 4B), but escalate deep reasoning to larger models or distinct queues.
+- **Dynamic Context Compression:** Actively summarize or drop older turns to guarantee strict token headroom for tool responses.
+- **Resilient JSON Validation:** Never trust the LLM's raw tool output. The bridge must intercept malformed JSON, inject a correction prompt, and automatically retry the inference.
+
+---
 
 ## Usage
 
@@ -48,6 +58,7 @@ python -m cli.main --help
 | `simple` | Simple API tests (health, models, chat) + **Autotune** |
 | `medium` | Medium complexity tests (context, prompts, few-shot) + **Autotune** |
 | `complex` | Hardware-aware tests with spend tracking + **Autotune** |
+| `prove` | Closed-loop demonstration: Baseline Pass 1 vs Optimized Pass 2 |
 | `preset` | Auto-detect hardware and generate optimal presets |
 | `git-workflow` | AI-powered commit, review, and PR generation |
 | `run-tests` | Targeted tests (proxy, frontend, or full stack) |
@@ -64,16 +75,9 @@ Launch the full interactive TUI menu:
 lmstudio-test simple -i
 ```
 
-The menu provides:
-- Model auto-detection and selection
-- Hardware info display
-- 14 test options organized by complexity tier
-- Live results tables
-- Test history browsing
-
 ### Adaptive Intelligence (Auto-Tune)
 
-The CLI now supports automated performance optimization via the `--autotune` flag. This flag connects the test results directly to the Proxy Bridge's diagnostic tuner.
+The CLI supports automated performance optimization via the `--autotune` flag. This connects test results directly to the Proxy Bridge's `AdaptiveTuner`.
 
 ```bash
 # Example: Run simple tests and automatically optimize bridge config
@@ -81,155 +85,35 @@ lmstudio-test simple --model qwen3.5-4b --autotune
 ```
 
 **What it does:**
-1.  **Analyzes Errors**: Detects 500 errors (often VRAM overflow) and lowers `context_window` presets.
-2.  **Monitors Latency**: If inference speed (TPS) is low, it suggests better quantization tiers.
-3.  **Validates Compliance**: If OpenAI format checks fail, it enables "Strict Mode" for the Unified Normalizer.
+1. **Analyzes Errors**: Detects 500 errors (VRAM overflow) and lowers `context_window` presets.
+2. **Workload-Aware Tuning**: Compares TPS between code and reasoning tasks to determine if the workload is compute-bound or memory-bound, adjusting quantization and context accordingly.
+3. **Validates Compliance**: If format checks fail, it enforces strict system prompts and enables auto-retry loops for JSON tools.
 
 ### Simple Tests
-
 Basic API connectivity and compatibility:
-
 ```bash
-# Health, models, OpenAI compat (no model needed)
-lmstudio-test simple
-
-# Include chat tests and auto-tune
 lmstudio-test simple --model qwen3.5-4b --autotune
-
-# Interactive mode
-lmstudio-test simple -i
 ```
 
-Tests run:
-- Health endpoint (`/health`)
-- System status (`/api/status`)
-- Model listing (`/v1/models`)
-- Hardware detection (`/api/status`)
-- OpenAI format compliance
-- Anthropic format compatibility
-- Chat completions (streaming + non-streaming)
-
 ### Medium Tests
-
-Prompt and context engineering:
-
+Context engineering and tool schema reliability:
 ```bash
 lmstudio-test medium --model qwen3.5-4b --autotune
 ```
 
-Tests run:
-- **Context Window**: 512/4096/8192 token handling, overflow behavior, system prompt preservation
-- **System Prompts**: Basic adherence, role-based (developer/system), long prompts, format instructions, multi-turn persistence
-- **Few-Shot**: Zero-shot, one-shot, 3-shot pattern adherence, JSON/code/list format compliance, entity extraction
-
 ### Complex Tests
-
 Hardware-aware adaptation and spend tracking:
-
 ```bash
-# Detect hardware, generate presets, run benchmarks
-lmstudio-test complex
-
-# With specific model for benchmarking and auto-tune
 lmstudio-test complex --model qwen3.5-4b --autotune
 ```
+*Generates the "Spend Report" detailing Tokens/sec and Efficiency.*
 
-Tests run:
-- **Hardware Detection**: GPU, VRAM, RAM, CPU cores (local or via bridge)
-- **Preset Generation**: VRAM-tier-based optimal settings (quantization, context, batch size, GPU layers)
-- **Benchmarks**: Short/code/reasoning prompts with token tracking
-- **Spend Report**: Total tokens, time, tokens/sec, efficiency rating
-
-### Preset Generator
-
-Auto-detect hardware and generate optimal LMStudio configuration:
-
+### Prove Command
+Demonstrates the bridge's ability to adapt to failures:
 ```bash
-# Detect and display recommended settings
-lmstudio-test preset
-
-# For a specific model
-lmstudio-test preset --model qwen3.5-4b
-
-# Attempt to apply via proxy bridge (if endpoint available)
-lmstudio-test preset --apply
+lmstudio-test prove --model qwen3.5-4b
 ```
-
-Hardware tiers:
-| Tier | VRAM | Quantization | Context | Batch |
-|------|------|-------------|---------|-------|
-| Low | <4GB | Q2_K | 2048 | 1 |
-| Medium | 4-8GB | Q4_K_M | 4096 | 8 |
-| High | 8-16GB | Q5_K_M | 8192 | 32 |
-| Ultra | >16GB | Q6_K | 16384 | 64 |
-
-### Git Workflow
-
-AI-powered git operations using LMStudio:
-
-```bash
-lmstudio-test git-workflow --model qwen3.5-4b
-
-# With auto-commit
-lmstudio-test git-workflow --model qwen3.5-4b --commit
-
-# Full output
-lmstudio-test git-workflow --model qwen3.5-4b --output full
-
-# JSON output for scripting
-lmstudio-test git-workflow --model qwen3.5-4b --output json
-```
-
-Generates:
-- Conventional commit messages from git diff
-- Code review with issues, suggestions, security concerns, rating
-- Markdown PR description with title, body, key changes
-
-### Run Tests (Targeted)
-
-Test specific components independently:
-
-```bash
-# Proxy bridge only (port 3001)
-lmstudio-test run-tests --target proxy
-
-# Frontend only (port 3000)
-lmstudio-test run-tests --target frontend
-
-# Full stack (both together)
-lmstudio-test run-tests --target full
-```
-
-### Compare Runs
-
-```bash
-lmstudio-test compare <run-id-1> <run-id-2>
-```
-
-Shows differences in pass/fail status and latency between two runs.
-
-### Export Results
-
-```bash
-# Export all recent results as JSON
-lmstudio-test export
-
-# Export as CSV to file
-lmstudio-test export --format csv -o results.csv
-
-# Export specific run
-lmstudio-test export --run-id abc12345
-```
-
-### History and Details
-
-```bash
-# View last 10 runs
-lmstudio-test history
-
-# View specific run details
-lmstudio-test show <run-id>
-```
+*Runs Pass 1, triggers the Adaptive Tuner, and runs Pass 2 to validate improvements in context handling and schema adherence.*
 
 ## Test Result Storage
 
@@ -238,23 +122,20 @@ Results are stored in `cli/results/data/` as JSON files with:
 - Test type and timestamp
 - Pass/fail counts
 - Duration in milliseconds
-- Full test results
+- Full test results and the Spend Report
 
 ## Architecture
 
-```
+```text
 CLI (click + rich TUI)
   -> Proxy Bridge (port 3001)
-    [Unified Normalizer] -> (Enforces OpenAI strictness)
-    [Adaptive Tuner]     -> (Optimizes presets based on CLI results)
+    [Unified Normalizer] -> (Enforces OpenAI strictness & JSON Recovery)
+    [Context Builder]    -> (Dynamic Context Compression for Tool Headroom)
+    [Adaptive Tuner]     -> (Workload-aware profiling from Spend Reports)
     -> LM Studio (port 1234)
 
 Test Tiers:
-  Simple   -> Health, models, API compatibility, chat
-  Medium   -> Context window, system prompts, few-shot
-  Complex  -> Hardware detection, presets, benchmark (TPS tracking)
-
-Intelligence Core:
-  Auto-Tune -> Closed-loop optimization from CLI benchmarks
-  Precision -> VRAM-aware context scaling and tier fallback
+  Simple   -> Health, models, API compatibility
+  Medium   -> Context limits, system prompts, JSON format compliance
+  Complex  -> Hardware profiling, benchmark TPS, memory-bound detection
 ```
