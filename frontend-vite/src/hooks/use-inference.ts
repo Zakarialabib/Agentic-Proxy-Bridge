@@ -171,7 +171,7 @@ export function useInference(options: UseInferenceOptions = {}) {
   const loadModel = useCallback(async (modelKey: string, contextLength = 8192) => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
     try {
-      const result = await api.loadModel(modelKey, contextLength)
+      const result = await api.loadModel(modelKey, { context_length: contextLength })
       if (result) {
         setLoadedModels(prev => [...prev, modelKey])
       }

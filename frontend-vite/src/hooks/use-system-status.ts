@@ -73,7 +73,7 @@ export function useSystemStatusData(): UseSystemStatusDataReturn {
 
   const loadModelMutation = useMutation({
     mutationFn: ({ modelKey, contextLength }: { modelKey: string; contextLength?: number }) =>
-      loadModel(modelKey, contextLength),
+      loadModel(modelKey, { context_length: contextLength }),
     onSuccess: () => {
       // Invalidate and refetch loaded models
       queryClient.invalidateQueries({ queryKey: ['models-loaded'] })

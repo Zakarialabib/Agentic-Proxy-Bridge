@@ -188,7 +188,6 @@ export default function App() {
         return <ErrorBoundary><OrchestratePanel tools={tools ?? []} agents={[]} /></ErrorBoundary>
       case 'knowledge':
         return <ErrorBoundary><KnowledgePanel
-          knowledgeNodes={[]}
           status={status ?? null}
           knowledgeQuery=""
           onQueryChange={() => {}}

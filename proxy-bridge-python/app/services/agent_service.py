@@ -3,7 +3,7 @@ import httpx
 import re
 from typing import AsyncGenerator, List, Dict, Any, Optional
 from app.services.pool import connection_pool, ACTIVE_CONNECTIONS
-from app.services.tools import tool_orchestrator
+from app.services.tool_service import tool_registry
 from app.core.settings import settings
 
 MAX_REACT_STEPS = 10
@@ -99,13 +99,21 @@ async def intercept_and_execute_tools(
                     args = tool_data.get("arguments") or tool_data.get("parameters") or {}
                     
                     # Execution
-                    result = await tool_orchestrator.execute_tool(tool_name, args)
+                    call_result = await tool_registry.execute(tool_name, args)
+                    
+                    if call_result.success:
+                        if isinstance(call_result.result, dict) and "content" in call_result.result:
+                            content_val = call_result.result["content"]
+                        else:
+                            content_val = call_result.result
+                    else:
+                        content_val = f"Error: {call_result.error}"
                     
                     # Construct follow-up
                     current_messages.append({"role": "assistant", "content": tool_call_content})
                     current_messages.append({
                         "role": "user",
-                        "content": f"<tool_response>\n{json.dumps({'name': tool_name, 'content': result['content']})}\n</tool_response>"
+                        "content": f"<tool_response>\n{json.dumps({'name': tool_name, 'content': content_val})}\n</tool_response>"
                     })
                     
                     follow_up_payload = {**original_payload, "messages": current_messages}
