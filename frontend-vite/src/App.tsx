@@ -188,7 +188,6 @@ export default function App() {
         return <ErrorBoundary><OrchestratePanel tools={tools ?? []} agents={[]} /></ErrorBoundary>
       case 'knowledge':
         return <ErrorBoundary><KnowledgePanel
-          knowledgeNodes={[]}
           status={status ?? null}
           knowledgeQuery=""
           onQueryChange={() => {}}
@@ -247,15 +246,23 @@ export default function App() {
           showAdvancedSettings={false}
           onShowAdvancedSettings={() => {}}
           chatTemperature={chatStore.temperature}
+          chatTopP={chatStore.topP}
+          chatMinP={chatStore.minP}
+          chatRepeatPenalty={chatStore.repeatPenalty}
           chatMaxTokens={chatStore.maxTokens}
           chatContextLength={chatStore.contextWindow}
           chatThinkingMode={chatStore.thinkingMode}
+          systemPrompt={chatStore.systemPrompt}
           activeScenario={null}
           onScenarioSelect={() => {}}
           onTemperatureChange={(v) => chatStore.setParams({ temperature: v })}
+          onTopPChange={(v) => chatStore.setParams({ topP: v })}
+          onMinPChange={(v) => chatStore.setParams({ minP: v })}
+          onRepeatPenaltyChange={(v) => chatStore.setParams({ repeatPenalty: v })}
           onMaxTokensChange={(v) => chatStore.setParams({ maxTokens: v })}
           onContextLengthChange={(v) => chatStore.setParams({ contextWindow: v })}
           onThinkingModeChange={(v) => chatStore.setParams({ thinkingMode: v })}
+          onSystemPromptChange={(v) => chatStore.setParams({ systemPrompt: v })}
         /></ErrorBoundary>
       default:
         return null

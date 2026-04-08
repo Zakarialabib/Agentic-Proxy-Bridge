@@ -15,7 +15,7 @@ import { getPollingPolicy } from '@/lib/polling-policies'
 import type {
   ThreeTimeHorizon,
   VRAMTetrisBlock,
-  HealthOrganism,
+  HealthStatus,
   ConfidencePoint,
   PresetNode,
   SessionNarrative,
@@ -34,7 +34,7 @@ export interface UseObservabilityDataReturn {
   vram: VRAMTetrisBlock[] | undefined
   vramLoading: boolean
   vramError: Error | null
-  health: HealthOrganism | undefined
+  health: HealthStatus | undefined
   healthLoading: boolean
   healthError: Error | null
   confidence: ConfidencePoint[] | undefined

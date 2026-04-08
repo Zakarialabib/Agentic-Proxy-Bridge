@@ -12,15 +12,19 @@ interface ChatState {
   selectedModel: string | null
   isLoading: boolean
   temperature: number
+  topP: number
+  minP: number
+  repeatPenalty: number
   maxTokens: number
   contextWindow: number
   thinkingMode: boolean
+  systemPrompt: string
 
   setModel: (modelId: string | null) => void
   setMessages: (messages: ChatMessage[]) => void
   addMessage: (message: ChatMessage) => void
   sendStreamingMessage: (content: string) => Promise<void>
-  setParams: (params: Partial<Pick<ChatState, 'temperature' | 'maxTokens' | 'contextWindow' | 'thinkingMode'>>) => void
+  setParams: (params: Partial<Pick<ChatState, 'temperature' | 'topP' | 'minP' | 'repeatPenalty' | 'maxTokens' | 'contextWindow' | 'thinkingMode' | 'systemPrompt'>>) => void
   clearMessages: () => void
   setLoading: (loading: boolean) => void
 }
@@ -30,9 +34,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   selectedModel: null,
   isLoading: false,
   temperature: 0.7,
+  topP: 0.9,
+  minP: 0.05,
+  repeatPenalty: 1.05,
   maxTokens: 2048,
   contextWindow: 4096,
   thinkingMode: false,
+  systemPrompt: '',
 
   setModel: (modelId) => set({ selectedModel: modelId }),
 
@@ -41,7 +49,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
 
   sendStreamingMessage: async (content: string) => {
-    const { selectedModel, temperature, maxTokens, contextWindow, thinkingMode } = get()
+    const { selectedModel, temperature, topP, minP, repeatPenalty, maxTokens, contextWindow, thinkingMode, systemPrompt } = get()
     if (!content.trim()) return
 
     const userMessage: ChatMessage = {
@@ -58,6 +66,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
     try {
       const messages = [...get().messages.map(m => ({ role: m.role, content: m.content }))]
+      
+      // Inject system prompt if it exists and there isn't one already at the start
+      if (systemPrompt.trim() && (messages.length === 0 || messages[0].role !== 'system')) {
+        messages.unshift({ role: 'system', content: systemPrompt.trim() })
+      }
 
       const response = await fetch('/v1/chat/completions', {
         method: 'POST',
@@ -67,6 +80,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           messages,
           stream: true,
           temperature,
+          top_p: topP,
+          min_p: minP,
+          repeat_penalty: repeatPenalty,
           max_tokens: maxTokens,
           contextWindow,
           thinking: thinkingMode,

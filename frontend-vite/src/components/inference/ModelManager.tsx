@@ -1,17 +1,17 @@
-
-
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Flame, Thermometer, Snowflake, MemoryStick, Database, Plus, Minus } from 'lucide-react'
+import { Flame, Thermometer, Snowflake, MemoryStick, Database, Plus, Minus, Wand2 } from 'lucide-react'
 import type { ModelInfo } from '@/lib/types'
+import { AutoConfigTuner } from './AutoConfigTuner'
 
 interface ModelManagerProps {
   models: ModelInfo[]
-  onToggleModel: (modelKey: string, currentlyLoaded: boolean) => void
+  onToggleModel: (modelKey: string, currentlyLoaded: boolean, config?: any) => void
 }
 
-function ModelCard({ model, onToggle }: { model: ModelInfo, onToggle: () => void }) {
+function ModelCard({ model, onToggle, onAutoConfig }: { model: ModelInfo, onToggle: () => void, onAutoConfig: () => void }) {
   const typeColor = model.type === 'llm'
     ? 'from-cyan-500/10 to-emerald-500/10 border-cyan-500/20'
     : 'from-purple-500/10 to-pink-500/10 border-purple-500/20'
@@ -34,17 +34,30 @@ function ModelCard({ model, onToggle }: { model: ModelInfo, onToggle: () => void
             {model.quantization && <span className="text-slate-500">{String(model.quantization)}</span>}
           </div>
         </div>
-        <Button
-          size="sm"
-          variant={model.loaded ? "destructive" : "default"}
-          onClick={onToggle}
-          className={model.loaded 
-            ? "bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30" 
-            : "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30"
-          }
-        >
-          {model.loaded ? <Minus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-        </Button>
+        <div className="flex gap-1">
+          {!model.loaded && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onAutoConfig}
+              className="bg-slate-800/50 hover:bg-slate-700 text-indigo-400 border-indigo-500/30"
+              title="Auto Config Tuner"
+            >
+              <Wand2 className="w-4 h-4" />
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant={model.loaded ? "destructive" : "default"}
+            onClick={onToggle}
+            className={model.loaded 
+              ? "bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30" 
+              : "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30"
+            }
+          >
+            {model.loaded ? <Minus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          </Button>
+        </div>
       </div>
       
       <div className="grid grid-cols-2 gap-2 mb-2">
@@ -86,28 +99,45 @@ function ModelStateBadge({ loaded, state }: { loaded: boolean, state?: 'hot' | '
 }
 
 export function ModelManager({ models, onToggleModel }: ModelManagerProps) {
+  const [tunerModel, setTunerModel] = useState<ModelInfo | null>(null)
+
   return (
-    <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
-      <CardHeader>
-        <CardTitle className="text-white flex items-center gap-2">
-          <MemoryStick className="w-5 h-5 text-cyan-400" />
-          Model Selection
-        </CardTitle>
-        <CardDescription className="text-slate-400">
-          Select models to load. VRAM budget is dynamically calculated.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {models.map(model => (
-            <ModelCard 
-              key={model.id} 
-              model={model} 
-              onToggle={() => onToggleModel(model.modelKey, model.loaded)}
-            />
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <>
+      <Card className="bg-slate-800/30 border-slate-700/50 backdrop-blur-sm">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <MemoryStick className="w-5 h-5 text-cyan-400" />
+            Model Selection
+          </CardTitle>
+          <CardDescription className="text-slate-400">
+            Select models to load or use the Magic Tuner to auto-configure parameters for your hardware.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {models.map(model => (
+              <ModelCard 
+                key={model.id} 
+                model={model} 
+                onToggle={() => onToggleModel(model.modelKey, model.loaded)}
+                onAutoConfig={() => setTunerModel(model)}
+              />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {tunerModel && (
+        <AutoConfigTuner
+          model={tunerModel}
+          isOpen={true}
+          onClose={() => setTunerModel(null)}
+          onApply={(config) => {
+            onToggleModel(tunerModel.modelKey, false, config)
+            setTunerModel(null)
+          }}
+        />
+      )}
+    </>
   )
 }
