@@ -135,6 +135,17 @@ async def intercept_and_execute_tools(
                 max_tokens = original_payload.get("max_tokens") or 8192
                 follow_up_payload = {**original_payload, "messages": enforce_context_window(current_messages, max_tokens)}
                 
+                # --- Cognition Sharding ---
+                # If we're deep in a multi-turn reasoning loop, escalate to a more capable model
+                if recursive_hops >= 3:
+                    import os
+                    fallback_model = os.environ.get("REASONING_FALLBACK_MODEL")
+                    current_model = follow_up_payload.get("model")
+                    if fallback_model and current_model != fallback_model:
+                        print(f"[Agentic Bridge] Cognition Sharding: Escalating reasoning from {current_model} to {fallback_model} (Hop {recursive_hops})")
+                        follow_up_payload["model"] = fallback_model
+                # --------------------------
+                
                 client = connection_pool.get_client("openai")
                 headers = {"Content-Type": "application/json"}
                 

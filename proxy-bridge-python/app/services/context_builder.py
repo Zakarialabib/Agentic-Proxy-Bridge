@@ -64,7 +64,31 @@ def enforce_context_window(messages: List[Dict[str, Any]], max_tokens: int = 160
             "content": f"[System Note: {dropped_count} older conversation turns were compressed to maintain tool context headroom.]"
         })
         
-    final_messages.extend(retained_msgs)
+    # --- KV Cache Coalescing ---
+    # Coalesce older turns into a single <history> block to improve prefix caching
+    # Keep the last 2 messages (usually Assistant + User) intact
+    if len(retained_msgs) > 2:
+        history_msgs = retained_msgs[:-2]
+        recent_msgs = retained_msgs[-2:]
+        
+        history_text = "<history>\n"
+        for m in history_msgs:
+            role = m.get("role", "unknown").upper()
+            content = m.get("content", "")
+            if isinstance(content, list):
+                content = " ".join([c.get("text", "") for c in content if c.get("type") == "text"])
+            history_text += f"{role}: {content}\n"
+        history_text += "</history>"
+        
+        final_messages.append({
+            "role": "user",
+            "content": history_text
+        })
+        final_messages.extend(recent_msgs)
+    else:
+        final_messages.extend(retained_msgs)
+    # ---------------------------
+        
     return final_messages
 
 def map_model_name(model: str) -> str:

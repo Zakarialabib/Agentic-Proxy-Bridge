@@ -398,30 +398,37 @@ def prove(base_url: str, model: str):
         table.add_column("After (Pass 2)", style="green")
         table.add_column("Improvement", style="magenta")
 
-        # Extract metrics safely
-        def safe_lat(res):
-            detail = res.get("detail", "")
-            if "Avg=" in detail:
-                 try: return int(detail.split("Avg=")[1].split("ms")[0])
-                 except: return 0
-            return 0
-
-        p1_lat = safe_lat(p1_results)
-        p2_lat = safe_lat(p2_results)
+        # Extract specific metrics
+        def get_metric(res, category, test_name, field):
+            return res.get(category, {}).get("tests", {}).get(test_name, {}).get(field, "N/A")
+            
+        p1_format = get_metric(p1_results, "few_shot", "format_compliance", "ok")
+        p2_format = get_metric(p2_results, "few_shot", "format_compliance", "ok")
         
-        p1_pass = sum(1 for k, v in p1_results.items() if k != "detail" and isinstance(v, dict) and v.get("ok"))
-        p2_pass = sum(1 for k, v in p2_results.items() if k != "detail" and isinstance(v, dict) and v.get("ok"))
-        total = 3 # context, prompts, few_shot
+        p1_ctx_lat = get_metric(p1_results, "context_window", "large_context_8192", "latency_ms")
+        p2_ctx_lat = get_metric(p2_results, "context_window", "large_context_8192", "latency_ms")
+        
+        p1_sys = get_metric(p1_results, "system_prompts", "multi_turn_persistence", "ok")
+        p2_sys = get_metric(p2_results, "system_prompts", "multi_turn_persistence", "ok")
 
-        table.add_row("Avg Latency", f"{p1_lat}ms", f"{p2_lat}ms", f"{p1_lat-p2_lat}ms faster")
-        table.add_row("Success Rate", f"{p1_pass}/{total}", f"{p2_pass}/{total}", f"+{p2_pass-p1_pass} resolved")
+        table.add_row("Format Compliance (JSON)", "Pass" if p1_format is True else "Fail", "Pass" if p2_format is True else "Fail", "Fixed" if (not p1_format and p2_format) else "Unchanged")
+        
+        ctx_lat_diff = "N/A"
+        if isinstance(p1_ctx_lat, (int, float)) and isinstance(p2_ctx_lat, (int, float)):
+            ctx_lat_diff = f"{p1_ctx_lat - p2_ctx_lat:.0f}ms faster" if p1_ctx_lat > p2_ctx_lat else f"{p2_ctx_lat - p1_ctx_lat:.0f}ms slower"
+        table.add_row("Large Context (8k) Latency", f"{p1_ctx_lat}ms", f"{p2_ctx_lat}ms", ctx_lat_diff)
+        
+        table.add_row("Multi-Turn Persistence", "Pass" if p1_sys is True else "Fail", "Pass" if p2_sys is True else "Fail", "Fixed" if (not p1_sys and p2_sys) else "Unchanged")
         
         console.print("\n", table)
         
-        if p2_pass > p1_pass or (p2_pass == p1_pass and p1_lat > 0 and p2_lat < p1_lat):
-            console.print("\n[bold green]✓ PROOF ACHIEVED: The system successfully adapted and improved performance.[/bold green]")
+        # We consider proof achieved if ANY of the core agentic metrics improved
+        improved = (not p1_format and p2_format) or (not p1_sys and p2_sys) or (isinstance(p1_ctx_lat, (int, float)) and isinstance(p2_ctx_lat, (int, float)) and p2_ctx_lat < p1_ctx_lat - 100)
+        
+        if improved:
+            console.print("\n[bold green]✓ PROOF ACHIEVED: The system successfully adapted and improved agentic performance.[/bold green]")
         else:
-            console.print("\n[bold yellow]⚠ TUNING APPLIED: Adaptations were made, but environmental factors or model limits prevented significant gain.[/bold yellow]")
+            console.print("\n[bold yellow]⚠ TUNING APPLIED: Adaptations were made, but environmental factors (e.g. immutable model weights) or model limits prevented significant runtime gain without reloading LM Studio.[/bold yellow]")
 
     asyncio.run(_run())
 
