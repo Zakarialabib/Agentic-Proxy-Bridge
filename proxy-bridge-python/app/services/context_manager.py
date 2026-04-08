@@ -1,10 +1,13 @@
-"""Context management service with sliding window eviction and token counting."""
+"""Context management service with sliding window eviction, token counting, and dynamic LM Studio control."""
 
 from __future__ import annotations
 
 import time
+import httpx
+import asyncio
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
+from app.core.settings import settings
 
 
 @dataclass
@@ -186,4 +189,77 @@ class ContextManager:
             session.current_tokens -= oldest.token_count
 
 
+class LMStudioContextController:
+    """
+    Dynamically adjusts LM Studio's context window based on agent state.
+    """
+    def __init__(self, base_url: str = None):
+        self.base_url = base_url or settings.lm_studio_base_url
+        self.current_context = 4096  # Start conservative
+        self.current_gpu_offload = "max"  # Assume fully offloaded by default
+        
+    async def adjust_for_trajectory(self, hop_count: int, tool_results_size: int, cognitive_mode: str = "reasoning"):
+        """
+        Dynamically adjust LM Studio's context window and gpu_offload based on agent state.
+        """
+        # Predictive Unloading: Freeze deeper layers during simple router tasks
+        if cognitive_mode == "router":
+            new_offload = 16 # Offload fewer layers to save VRAM and speed up
+        else:
+            new_offload = "max" # Thaw all layers for reasoning/compression
+            
+        if new_offload != self.current_gpu_offload:
+            await self._set_gpu_offload(new_offload)
+            self.current_gpu_offload = new_offload
+
+        # Context Window Adjustments
+        if hop_count > 2 and tool_results_size > 1000:
+            # About to enter heavy reasoning, reduce context to prevent OOM
+            new_context = 2048
+        elif hop_count == 0:
+            # Fresh conversation, standard context
+            new_context = 4096
+        else:
+            new_context = self.current_context
+            
+        if new_context != self.current_context:
+            await self._set_context_length(new_context)
+            self.current_context = new_context
+            
+    async def _set_gpu_offload(self, offload: Any):
+        """
+        Dynamically adjusts LM Studio's gpu_offload parameter to freeze/thaw layers.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(
+                    f"{self.base_url}/v0/models/loaded/config",
+                    json={"gpu_offload": offload}
+                )
+                if resp.status_code == 200:
+                    print(f"[Predictive Unloading] Adjusted LM Studio gpu_offload to {offload}")
+                else:
+                    print(f"[Predictive Unloading] Failed to adjust gpu_offload: {resp.status_code}")
+        except Exception as e:
+            print(f"[Predictive Unloading] Error adjusting gpu_offload: {str(e)}")
+            
+    async def _set_context_length(self, length: int):
+        """
+        LM Studio API endpoint for dynamic configuration.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(
+                    f"{self.base_url}/v0/models/loaded/config",
+                    json={"context_length": length}
+                )
+                if resp.status_code == 200:
+                    print(f"[Agentic Bridge] Dynamically adjusted LM Studio context length to {length}")
+                else:
+                    print(f"[Agentic Bridge] Failed to adjust context length: {resp.status_code}")
+        except Exception as e:
+            print(f"[Agentic Bridge] Error adjusting context length: {str(e)}")
+
+
 context_manager = ContextManager()
+context_controller = LMStudioContextController()

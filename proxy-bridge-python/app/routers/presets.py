@@ -117,9 +117,23 @@ async def delete_preset(preset_id: str):
 @router.post("/generate")
 async def generate_preset(req: PresetCreate):
     from app.services.adaptive_tuner import tuner
-    preset = tuner.generate_initial_preset(req.model_id)
-    preset["name"] = req.name # Override name with user's choice
-    return preset
+    from app.services.hardware_profiler import HardwareProfiler
+    from app.services.preset_sync import generate_lmstudio_preset, sync_to_lmstudio
+    
+    try:
+        preset = tuner.generate_initial_preset(req.model_id)
+        preset["name"] = req.name # Override name with user's choice
+        
+        # --- Native LM Studio Preset Sync ---
+        profiler = HardwareProfiler()
+        hw_profile = profiler.profile()
+        lmstudio_preset = generate_lmstudio_preset(hw_profile, req.model_id, preset)
+        sync_to_lmstudio(lmstudio_preset)
+        # -------------------------------------
+        
+        return preset
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate preset: {str(e)}")
 
 @router.post("/autotune")
 async def autotune_presets(payload: Dict[str, Any]):

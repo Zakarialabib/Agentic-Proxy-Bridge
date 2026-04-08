@@ -41,10 +41,12 @@ class LMStudioAdapter:
         models = await self.list_models()
         return [m for m in models if m.get("state") == "loaded" or m.get("loaded_instances", 0) > 0]
 
-    async def load_model(self, model_id: str) -> Dict[str, Any]:
+    async def load_model(self, model_id: str, **kwargs) -> Dict[str, Any]:
+        payload = {"model": model_id}
+        payload.update(kwargs)
         response = await self.client.post(
             "/v1/models/load",
-            json={"model": model_id},
+            json=payload,
         )
         response.raise_for_status()
         return response.json()

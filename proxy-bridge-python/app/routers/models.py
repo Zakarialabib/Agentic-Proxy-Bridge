@@ -64,13 +64,47 @@ async def load_model(payload: Dict[str, Any] = Body(...)):
     if not model_id:
         raise HTTPException(status_code=400, detail="model id required")
     
+    # --- Dynamic Quantization Interception ---
+    try:
+        from app.services.hardware_profiler import HardwareProfiler
+        from app.services.adaptive_tuner import AdaptiveTuner
+        profiler = HardwareProfiler()
+        tuner = AdaptiveTuner(profiler)
+        preset = tuner.generate_initial_preset(model_id)
+        
+        target_quant = preset.get("params", {}).get("quantization_target")
+        context_len = preset.get("params", {}).get("context_window")
+        
+        # Simple regex/replace approach for GGUF quantization strings (e.g. -Q6_K to -Q4_K_S)
+        if target_quant:
+            import re
+            # Matches patterns like -Q6_K, -Q5_K_M, -Q4_K_M, etc. ignoring case
+            quant_pattern = re.compile(r'-q[0-8]_[k_s_m]+', re.IGNORECASE)
+            
+            if quant_pattern.search(model_id):
+                modified_model_id = quant_pattern.sub(f"-{target_quant}", model_id)
+                if modified_model_id != model_id:
+                    print(f"[Bridge Proxy] Dynamic Quantization Interception: Rewriting {model_id} -> {modified_model_id}")
+                    model_id = modified_model_id
+                    
+        # Add context limit to kwargs
+        if context_len:
+            payload["context_length"] = context_len
+            
+    except Exception as e:
+        print(f"[Bridge Proxy] Warning: Failed to apply dynamic quantization interception: {e}")
+    # ----------------------------------------
+    
     async with LMStudioAdapter() as adapter:
         try:
-            await adapter.load_model(model_id)
+            # Pass remaining payload kwargs to LM Studio
+            kwargs = {k: v for k, v in payload.items() if k != "model"}
+            await adapter.load_model(model_id, **kwargs)
             return {
                 "instance_id": model_id,
                 "status": "loaded",
-                "load_time_seconds": 0
+                "load_time_seconds": 0,
+                "applied_config": kwargs
             }
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))

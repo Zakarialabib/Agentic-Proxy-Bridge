@@ -28,6 +28,7 @@ from cli.tests.complex.hardware_aware import run_hardware_aware_tests
 from cli.tests.complex.performance_benchmark import run_performance_benchmark_tests, print_performance_benchmark_summary
 from cli.tests.complex.stress_test import run_stress_tests, print_stress_test_summary
 from cli.tests.complex.model_comparison import run_model_comparison_tests, print_model_comparison_summary
+from cli.tests.complex.trajectory import run_trajectory_tests
 from cli.tests.complex.embedding_quality import run_embedding_quality_tests, print_embedding_quality_summary
 from cli.tests.full_stack.end_to_end import run_end_to_end_tests, print_end_to_end_summary
 from cli.tests.full_stack.rag_pipeline import run_rag_pipeline_tests, print_rag_pipeline_summary
@@ -342,7 +343,8 @@ async def _upload_for_tuning(base_url: str, test_type: str, results: dict):
 @cli.command()
 @click.option("--base-url", default="http://localhost:3001", help="Proxy bridge URL")
 @click.option("--model", required=True, help="Model to use for proof")
-def prove(base_url: str, model: str):
+@click.option("--trajectory", is_flag=True, help="Include multi-step trajectory evaluation")
+def prove(base_url: str, model: str, trajectory: bool):
     """Run a multi-pass 'Before vs After' adaptation proof."""
     console.print(Panel("[bold cyan]Adaptive Proof - Closed Loop Demonstration[/bold cyan]", border_style="cyan"))
 
@@ -351,6 +353,10 @@ def prove(base_url: str, model: str):
         results["context_window"] = await run_context_window_tests(base_url, model)
         results["system_prompts"] = await run_system_prompt_tests(base_url, model)
         results["few_shot"] = await run_few_shot_tests(base_url, model)
+        
+        if trajectory:
+            console.print("\n[yellow]Running trajectory evaluation...[/yellow]")
+            results["trajectory"] = await run_trajectory_tests(base_url, model)
         
         # Calculate detail (Avg latency)
         latencies = []
@@ -398,30 +404,46 @@ def prove(base_url: str, model: str):
         table.add_column("After (Pass 2)", style="green")
         table.add_column("Improvement", style="magenta")
 
-        # Extract metrics safely
-        def safe_lat(res):
-            detail = res.get("detail", "")
-            if "Avg=" in detail:
-                 try: return int(detail.split("Avg=")[1].split("ms")[0])
-                 except: return 0
-            return 0
-
-        p1_lat = safe_lat(p1_results)
-        p2_lat = safe_lat(p2_results)
+        # Extract specific metrics
+        def get_metric(res, category, test_name, field):
+            return res.get(category, {}).get("tests", {}).get(test_name, {}).get(field, "N/A")
+            
+        p1_format = get_metric(p1_results, "few_shot", "format_compliance", "ok")
+        p2_format = get_metric(p2_results, "few_shot", "format_compliance", "ok")
         
-        p1_pass = sum(1 for k, v in p1_results.items() if k != "detail" and isinstance(v, dict) and v.get("ok"))
-        p2_pass = sum(1 for k, v in p2_results.items() if k != "detail" and isinstance(v, dict) and v.get("ok"))
-        total = 3 # context, prompts, few_shot
-
-        table.add_row("Avg Latency", f"{p1_lat}ms", f"{p2_lat}ms", f"{p1_lat-p2_lat}ms faster")
-        table.add_row("Success Rate", f"{p1_pass}/{total}", f"{p2_pass}/{total}", f"+{p2_pass-p1_pass} resolved")
+        p1_ctx_lat = get_metric(p1_results, "context_window", "large_context_8192", "latency_ms")
+        p2_ctx_lat = get_metric(p2_results, "context_window", "large_context_8192", "latency_ms")
         
+        p1_sys = get_metric(p1_results, "system_prompts", "multi_turn_persistence", "ok")
+        p2_sys = get_metric(p2_results, "system_prompts", "multi_turn_persistence", "ok")
+
+        table.add_row("Format Compliance (JSON)", "Pass" if p1_format is True else "Fail", "Pass" if p2_format is True else "Fail", "Fixed" if (not p1_format and p2_format) else "Unchanged")
+        
+        ctx_lat_diff = "N/A"
+        if isinstance(p1_ctx_lat, (int, float)) and isinstance(p2_ctx_lat, (int, float)):
+            ctx_lat_diff = f"{p1_ctx_lat - p2_ctx_lat:.0f}ms faster" if p1_ctx_lat > p2_ctx_lat else f"{p2_ctx_lat - p1_ctx_lat:.0f}ms slower"
+        table.add_row("Large Context (8k) Latency", f"{p1_ctx_lat}ms", f"{p2_ctx_lat}ms", ctx_lat_diff)
+        
+        table.add_row("Multi-Turn Persistence", "Pass" if p1_sys is True else "Fail", "Pass" if p2_sys is True else "Fail", "Fixed" if (not p1_sys and p2_sys) else "Unchanged")
+        
+        if trajectory:
+             p1_tcr = p1_results.get("trajectory", {}).get("tcr", 0)
+             p2_tcr = p2_results.get("trajectory", {}).get("tcr", 0)
+             table.add_row("Trajectory TCR", f"{p1_tcr*100:.0f}%", f"{p2_tcr*100:.0f}%", f"+{(p2_tcr-p1_tcr)*100:.0f}% completion")
+             
+             p1_fail = p1_results.get("trajectory", {}).get("dominant_failure", "None")
+             p2_fail = p2_results.get("trajectory", {}).get("dominant_failure", "None")
+             table.add_row("Dominant Failure", str(p1_fail), str(p2_fail), "Fixed" if p1_fail != "None" and p2_fail == "None" else "Persistent")
+
         console.print("\n", table)
         
-        if p2_pass > p1_pass or (p2_pass == p1_pass and p1_lat > 0 and p2_lat < p1_lat):
-            console.print("\n[bold green]✓ PROOF ACHIEVED: The system successfully adapted and improved performance.[/bold green]")
+        # We consider proof achieved if ANY of the core agentic metrics improved
+        improved = (not p1_format and p2_format) or (not p1_sys and p2_sys) or (isinstance(p1_ctx_lat, (int, float)) and isinstance(p2_ctx_lat, (int, float)) and p2_ctx_lat < p1_ctx_lat - 100)
+        
+        if improved:
+            console.print("\n[bold green]✓ PROOF ACHIEVED: The system successfully adapted and improved agentic performance.[/bold green]")
         else:
-            console.print("\n[bold yellow]⚠ TUNING APPLIED: Adaptations were made, but environmental factors or model limits prevented significant gain.[/bold yellow]")
+            console.print("\n[bold yellow]⚠ TUNING APPLIED: Adaptations were made, but environmental factors (e.g. immutable model weights) or model limits prevented significant runtime gain without reloading LM Studio.[/bold yellow]")
 
     asyncio.run(_run())
 
