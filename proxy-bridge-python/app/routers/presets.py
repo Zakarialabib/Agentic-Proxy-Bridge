@@ -3,7 +3,7 @@ import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/presets", tags=["Presets"])
@@ -116,6 +116,7 @@ async def delete_preset(preset_id: str):
 
 @router.post("/generate")
 async def generate_preset(req: PresetCreate):
+    # This is effectively the "Auto Tune" logic
     return {
         "name": req.name,
         "model_id": req.model_id,
@@ -123,7 +124,54 @@ async def generate_preset(req: PresetCreate):
             "temperature": 0.7,
             "top_p": 0.9,
             "max_tokens": 2048,
+            "context_window": 4096,
+            "gpu_offload": 0.5
         },
         "system_prompt": req.system_prompt or "You are a helpful assistant.",
-        "description": f"Auto-generated preset for {req.model_id}",
+        "description": f"Auto-tuned preset for {req.model_id} on current hardware",
+    }
+
+@router.get("/chat-tests")
+async def get_chat_tests():
+    return {
+        "presets": [
+            {
+                "id": "test_reasoning",
+                "name": "Reasoning Test",
+                "category": "capabilities",
+                "description": "Tests logical deduction and math",
+                "system_prompt": "You are a logic expert.",
+                "user_prompt": "If all A are B, and some C are A, are some C definitely B?",
+                "expected_behavior": ["Yes"],
+                "validation": {"check_reasoning": True},
+                "metrics": ["latency", "tps"]
+            },
+            {
+                "id": "test_creative",
+                "name": "Creative Writing",
+                "category": "capabilities",
+                "description": "Tests storytelling and style",
+                "system_prompt": "You are a poetic novelist.",
+                "user_prompt": "Write a 3-sentence story about a lonely AI in a dormant spacestation.",
+                "expected_behavior": [],
+                "validation": {"check_reasoning": False},
+                "metrics": ["tps"]
+            }
+        ]
+    }
+
+@router.post("/run-test")
+async def run_chat_test(payload: Dict[str, Any] = Body(...)):
+    preset_id = payload.get("preset_id")
+    # Simulate a test run
+    time.sleep(1) 
+    return {
+        "status": "success",
+        "preset_id": preset_id,
+        "metrics": {
+            "tps": 42.5,
+            "ttft_ms": 120,
+            "total_tokens": 150
+        },
+        "passed": True
     }

@@ -1,4 +1,5 @@
 import httpx
+import time
 from typing import Any, Dict, List, Optional
 from app.core.settings import settings
 
@@ -22,7 +23,19 @@ class LMStudioAdapter:
         response = await self.client.get("/v1/models")
         response.raise_for_status()
         data = response.json()
-        return data.get("data", [])
+        raw_models = data.get("data", [])
+        
+        normalized = []
+        for m in raw_models:
+            normalized.append({
+                "id": m.get("id") or m.get("model_id") or "unknown",
+                "object": "model",
+                "created": m.get("created") or int(time.time()),
+                "owned_by": m.get("owned_by") or "lmstudio",
+                "state": m.get("state"),
+                "loaded_instances": m.get("loaded_instances", 0)
+            })
+        return normalized
 
     async def get_loaded_models(self) -> List[Dict[str, Any]]:
         models = await self.list_models()

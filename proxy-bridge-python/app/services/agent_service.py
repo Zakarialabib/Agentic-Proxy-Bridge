@@ -123,7 +123,7 @@ async def intercept_and_execute_tools(
                     
                     req = client.build_request(
                         "POST", 
-                        f"{settings.lm_studio_base_url}/chat/completions",
+                        f"{settings.lm_studio_base_url}/v1/chat/completions",
                         json=follow_up_payload,
                         headers=headers
                     )

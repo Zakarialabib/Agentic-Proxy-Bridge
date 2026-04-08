@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
+import time
 from app.schemas import ChatCompletionRequest
 from app.services.pool import connection_pool, ACTIVE_CONNECTIONS
 from app.services.agent_service import intercept_and_execute_tools
@@ -32,7 +33,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
         try:
             req = client.build_request(
                 "POST",
-                f"{settings.lm_studio_base_url}/chat/completions",
+                f"{settings.lm_studio_base_url}/v1/chat/completions",
                 json=payload,
                 headers=headers
             )
@@ -46,18 +47,30 @@ async def create_chat_completion(request: ChatCompletionRequest):
             )
         except Exception as e:
             ACTIVE_CONNECTIONS.dec()
-            raise HTTPException(status_code=500, detail=str(e))
+            return JSONResponse(
+                status_code=500,
+                content={"error": {"message": str(e), "type": "server_error"}}
+            )
     else:
         try:
             async with connection_pool.track_connection():
                 response = await client.post(
-                    f"{settings.lm_studio_base_url}/chat/completions",
+                    f"{settings.lm_studio_base_url}/v1/chat/completions",
                     json=payload,
                     headers=headers
                 )
                 response.raise_for_status()
-                # Non-streaming could also use a tool interception loop but 
-                # usually users want tools with streaming
-                return response.json()
+                data = response.json()
+                
+                # Standardize fields if missing
+                if "object" not in data:
+                    data["object"] = "chat.completion"
+                if "created" not in data:
+                    data["created"] = int(time.time())
+                
+                return data
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            return JSONResponse(
+                status_code=500,
+                content={"error": {"message": str(e), "type": "server_error"}}
+            )

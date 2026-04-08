@@ -8,7 +8,8 @@ import os
 EMBEDDING_BATCH_SIZE = Gauge('embedding_batch_size', 'Current size of embedding batch')
 EMBEDDING_LATENCY = Histogram('embedding_latency_seconds', 'Latency of embedding upstream requests')
 
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+from app.core.settings import settings
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "mock_key")
 
 class EmbeddingCoalescer:
@@ -80,7 +81,7 @@ class EmbeddingCoalescer:
         try:
             async with connection_pool.track_connection():
                 response = await client.post(
-                    f"{OPENAI_BASE_URL}/embeddings",
+                    f"{settings.lm_studio_base_url}/v1/embeddings",
                     json=payload,
                     headers=headers
                 )

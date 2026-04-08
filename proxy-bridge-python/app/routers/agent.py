@@ -11,7 +11,8 @@ import json
 
 router = APIRouter(prefix="/v1", tags=["Agent"])
 
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+from app.core.settings import settings
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "mock_key")
 
 @router.post("/agent/orchestrate")
@@ -43,7 +44,7 @@ async def orchestrate_agent(request: AgentOrchestrateRequest):
             try:
                 req = client.build_request(
                     "POST",
-                    f"{OPENAI_BASE_URL}/chat/completions",
+                    f"{settings.lm_studio_base_url}/v1/chat/completions",
                     json=chat_payload,
                     headers=headers
                 )
@@ -60,7 +61,7 @@ async def orchestrate_agent(request: AgentOrchestrateRequest):
         else:
             async with connection_pool.track_connection():
                 response = await client.post(
-                    f"{OPENAI_BASE_URL}/chat/completions",
+                    f"{settings.lm_studio_base_url}/v1/chat/completions",
                     json=chat_payload,
                     headers=headers
                 )

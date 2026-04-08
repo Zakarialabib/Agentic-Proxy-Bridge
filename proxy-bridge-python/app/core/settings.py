@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     ENABLE_PROBING: bool = False
     ENABLE_PREWARMING: bool = False
     ENABLE_FALLBACK_CHAINS: bool = False
+    APPROVAL_MODE: str = "autonomous"
 
     # Logging Settings
     LOG_LEVEL: str = "INFO"
