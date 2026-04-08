@@ -215,8 +215,8 @@ class PresetGenerator:
     }
 
     def generate(self, hardware: dict[str, Any], model_name: str = "") -> dict[str, Any]:
-        vram = hardware.get("gpu_vram_gb", 0)
-        ram = hardware.get("system_ram_gb", 0)
+        vram = hardware.get("gpu_vram_gb") or 0.0
+        ram = hardware.get("system_ram_gb") or 0.0
         effective_memory = vram if vram > 0 else ram * 0.8
 
         tier = self._select_tier(effective_memory)

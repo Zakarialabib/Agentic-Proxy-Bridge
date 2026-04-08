@@ -116,20 +116,30 @@ async def delete_preset(preset_id: str):
 
 @router.post("/generate")
 async def generate_preset(req: PresetCreate):
-    # This is effectively the "Auto Tune" logic
-    return {
-        "name": req.name,
-        "model_id": req.model_id,
-        "params": {
-            "temperature": 0.7,
-            "top_p": 0.9,
-            "max_tokens": 2048,
-            "context_window": 4096,
-            "gpu_offload": 0.5
-        },
-        "system_prompt": req.system_prompt or "You are a helpful assistant.",
-        "description": f"Auto-tuned preset for {req.model_id} on current hardware",
-    }
+    from app.services.adaptive_tuner import tuner
+    preset = tuner.generate_initial_preset(req.model_id)
+    preset["name"] = req.name # Override name with user's choice
+    return preset
+
+@router.post("/autotune")
+async def autotune_presets(payload: Dict[str, Any]):
+    """
+    Accepts test results and applies heuristic tuning to the configuration.
+    """
+    global _presets_store
+    _load_presets_store()
+    from app.services.adaptive_tuner import AdaptiveTuner
+    
+    test_type = payload.get("type", "medium")
+    results = payload.get("results", {})
+    
+    tuner = AdaptiveTuner(_presets_store)
+    updated_store = tuner.tune_from_results(test_type, results)
+    
+    _presets_store = updated_store
+    _save_presets_store()
+    
+    return {"status": "success", "message": "Presets updated based on test results"}
 
 @router.get("/chat-tests")
 async def get_chat_tests():

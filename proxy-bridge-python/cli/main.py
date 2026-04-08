@@ -52,10 +52,11 @@ def cli():
 
 
 @cli.command()
-@click.option("--base-url", default="http://192.168.1.12:3001", help="Proxy bridge URL")
+@click.option("--base-url", default="http://localhost:3001", help="Proxy bridge URL")
 @click.option("--model", default=None, help="Model to test with")
 @click.option("--interactive", "-i", is_flag=True, help="Run in interactive mode")
-def simple(base_url: str, model: str | None, interactive: bool):
+@click.option("--autotune", is_flag=True, help="Automatically optimize config based on results")
+def simple(base_url: str, model: str | None, interactive: bool, autotune: bool):
     """Run simple API tests (health, models, chat completions)."""
     if interactive:
         asyncio.run(main_menu(base_url))
@@ -65,26 +66,35 @@ def simple(base_url: str, model: str | None, interactive: bool):
 
     async def _run():
         results = {}
-        console.print("\n[yellow]Running health tests...[/yellow]")
-        results["health"] = await run_health_tests(base_url)
+        try:
+            console.print("\n[yellow]Running health tests...[/yellow]")
+            results["health"] = await run_health_tests(base_url)
 
-        console.print("\n[yellow]Running OpenAI compatibility tests...[/yellow]")
-        results["openai_compat"] = await run_openai_compat_tests(base_url)
+            console.print("\n[yellow]Running OpenAI compatibility tests...[/yellow]")
+            results["openai_compat"] = await run_openai_compat_tests(base_url)
 
-        if model:
-            console.print(f"\n[yellow]Running chat tests with {model}...[/yellow]")
-            results["chat"] = await run_chat_tests(base_url, model)
+            if model:
+                console.print(f"\n[yellow]Running chat tests with {model}...[/yellow]")
+                results["chat"] = await run_chat_tests(base_url, model)
 
-        run_id = store.save("simple", results)
-        _print_summary(results, run_id)
+            run_id = store.save("simple", results)
+            _print_summary(results, run_id)
+            
+            if autotune:
+                await _upload_for_tuning(base_url, "simple", results)
+        except Exception as e:
+            console.print(f"\n[bold red]Error during simple tests:[/bold red] {str(e)}")
+            import traceback
+            console.print(traceback.format_exc())
 
     asyncio.run(_run())
 
 
 @cli.command()
-@click.option("--base-url", default="http://192.168.1.12:3001", help="Proxy bridge URL")
+@click.option("--base-url", default="http://localhost:3001", help="Proxy bridge URL")
 @click.option("--model", default=None, help="Model to test with")
-def medium(base_url: str, model: str | None):
+@click.option("--autotune", is_flag=True, help="Automatically optimize config based on results")
+def medium(base_url: str, model: str | None, autotune: bool):
     """Run medium complexity tests (prompt & context engineering)."""
     if not model:
         console.print("[red]Model is required for medium tests. Use --model <name>[/red]")
@@ -106,13 +116,17 @@ def medium(base_url: str, model: str | None):
         run_id = store.save("medium", results)
         _print_summary(results, run_id)
 
+        if autotune:
+            await _upload_for_tuning(base_url, "medium", results)
+
     asyncio.run(_run())
 
 
 @cli.command()
-@click.option("--base-url", default="http://192.168.1.12:3001", help="Proxy bridge URL")
+@click.option("--base-url", default="http://localhost:3001", help="Proxy bridge URL")
 @click.option("--model", default=None, help="Model to test with")
-def complex(base_url: str, model: str | None):
+@click.option("--autotune", is_flag=True, help="Automatically optimize config based on results")
+def complex(base_url: str, model: str | None, autotune: bool):
     """Run complex tests (hardware-aware adaptation, spend optimization)."""
     console.print(Panel("[bold red]Complex Tests - Hardware Aware[/bold red]", border_style="red"))
 
@@ -150,6 +164,9 @@ def complex(base_url: str, model: str | None):
 
             console.print(spend_table)
             console.print(f"\n[bold]Efficiency: {benchmark.get('efficiency', 'unknown').upper()}[/bold]")
+
+        if autotune:
+            await _upload_for_tuning(base_url, "complex", results)
 
     asyncio.run(_run())
 
@@ -293,10 +310,33 @@ def _print_summary(results: dict, run_id: str):
     for name, result in results.items():
         status = "PASS" if result.get("ok") else "FAIL"
         details = result.get("detail", "")
-        table.add_row(name, status, str(details)[:50])
+        if not result.get("ok") and "tests" in result:
+             # Add sub-test failure details for nested results like openai_compat
+             failed_subs = [f"{k}: {v.get('details', 'fail')}" for k, v in result["tests"].items() if not v.get("ok")]
+             if failed_subs:
+                 details = f"FAIL IN: {', '.join(failed_subs[:2])}"
+        
+        table.add_row(name, status, str(details)[:100])
 
     console.print(table)
     console.print(f"\n[dim]Results saved. View with: lmstudio-test history[/dim]")
+
+
+async def _upload_for_tuning(base_url: str, test_type: str, results: dict):
+    """Upload test results to the bridge for adaptive tuning."""
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{base_url}/api/presets/autotune",
+                json={"type": test_type, "results": results}
+            )
+            if resp.status_code == 200:
+                console.print(f"\n[bold green]✓ Adaptive Tuning Complete: {resp.json().get('message')}[/bold green]")
+            else:
+                console.print(f"\n[yellow]! Tuning Failed (Status {resp.status_code})[/yellow]")
+    except Exception as e:
+        console.print(f"\n[red]! Failed to connect for autotuning: {str(e)}[/red]")
 
 
 @cli.command()

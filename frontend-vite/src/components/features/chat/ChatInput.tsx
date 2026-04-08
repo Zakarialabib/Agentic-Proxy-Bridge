@@ -6,9 +6,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
-import { Send, Sparkles, Settings, RefreshCw } from 'lucide-react'
+import { Send, Sparkles, Settings, RefreshCw, Command, Zap } from 'lucide-react'
 import type { ModelPresetConfig } from '@/lib/types'
 import { ModelSelector } from '@/components/model-selector'
+import { cn } from '@/lib/utils'
 
 interface ChatInputProps {
   isLoading: boolean
@@ -75,18 +76,76 @@ export function ChatInput({
   onThinkingModeChange,
   onSystemPromptChange,
 }: ChatInputProps) {
+  
+  const estimatedTokens = Math.ceil(inputMessage.length / 4);
+
   return (
-    <div className="p-4 border-t border-slate-700/50">
-      <div className="mb-3">
-        <Button 
-          onClick={() => onShowModelSelector(!showModelSelector)}
-          className={`w-full mb-2 ${currentModel ? 'bg-gradient-to-r from-cyan-500 to-emerald-500' : 'bg-slate-700 hover:bg-slate-600'} text-white`}
-        >
-          <Sparkles className="w-4 h-4 mr-2" />
-          {currentModel ? `Model: ${currentModel}` : 'Select Model'}
-        </Button>
+    <div className="p-4 md:p-6 bg-slate-900/40 backdrop-blur-xl border-t border-slate-700/50 relative z-10">
+      <div className="max-w-4xl mx-auto space-y-4">
+        
+        {/* Model Selection Row */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button 
+            onClick={() => onShowModelSelector(!showModelSelector)}
+            variant="outline"
+            className={cn(
+              "h-8 px-3 text-xs border-slate-700 transition-all duration-300",
+              currentModel ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'bg-slate-800 text-slate-400'
+            )}
+          >
+            <Sparkles className="w-3.5 h-3.5 mr-2" />
+            {currentModel ? currentModel.split('/').pop() : 'Select Foundation Model'}
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onRefreshModels}
+            className="h-8 w-8 p-0 text-slate-500 hover:text-white"
+          >
+            <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
+          </Button>
+
+          <div className="h-4 w-[1px] bg-slate-700 mx-1" />
+
+          {modelPresets.length > 0 && (
+            <Select value={selectedModelPreset} onValueChange={onPresetSelect}>
+              <SelectTrigger className="w-[140px] bg-slate-900/50 border-slate-700 text-slate-300 h-8 text-[10px] uppercase tracking-wider font-semibold">
+                <SelectValue placeholder="Preset" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-700">
+                {modelPresets.map(preset => (
+                  <SelectItem key={preset.id} value={preset.id} className="text-white text-xs">
+                    {preset.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <div className="flex-1" />
+
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onShowAdvancedSettings(!showAdvancedSettings)}
+            className={cn(
+              "h-8 px-2 text-[10px] uppercase tracking-wider font-bold transition-all",
+              showAdvancedSettings ? 'text-cyan-400 bg-cyan-500/10' : 'text-slate-500'
+            )}
+          >
+            <Settings className="w-3.5 h-3.5 mr-1.5" />
+            Config
+          </Button>
+        </div>
+
+        {/* Floating Panels */}
         {showModelSelector && (
-          <div className="mb-3 p-3 rounded-lg bg-slate-900/50 border border-slate-700">
+          <div className="absolute bottom-[100%] left-4 right-4 mb-4 p-4 rounded-2xl bg-slate-900/90 backdrop-blur-2xl border border-slate-700/50 shadow-2xl animate-in fade-in zoom-in-95 fill-mode-both">
+            <h3 className="text-xs font-bold text-slate-400 mb-3 uppercase tracking-widest flex items-center gap-2">
+              <Zap className="w-3 h-3 text-cyan-400" />
+              Available Local Instances
+            </h3>
             <ModelSelector 
               selectedModel={currentModel ?? undefined}
               onModelLoaded={(modelId) => {
@@ -98,154 +157,125 @@ export function ChatInput({
             />
           </div>
         )}
-      </div>
 
-      {modelPresets.length > 0 && (
-        <div className="mb-3">
-          <Label className="text-xs text-slate-400">Quick Presets</Label>
-          <Select value={selectedModelPreset} onValueChange={onPresetSelect}>
-            <SelectTrigger className="bg-slate-900/50 border-slate-700 text-white h-8 text-xs">
-              <SelectValue placeholder="Load preset..." />
-            </SelectTrigger>
-            <SelectContent className="bg-slate-800 border-slate-700">
-              {modelPresets.map(preset => (
-                <SelectItem key={preset.id} value={preset.id} className="text-white text-xs">
-                  {preset.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+        {showAdvancedSettings && (
+          <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/50 space-y-4 animate-in slide-in-from-top-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <Label className="text-[10px] uppercase tracking-widest font-bold text-slate-500">System Directives</Label>
+                  <Badge variant="outline" className="text-[9px] border-slate-700 text-slate-500">Global context</Badge>
+                </div>
+                <Textarea
+                  value={systemPrompt}
+                  onChange={(e) => onSystemPromptChange(e.target.value)}
+                  placeholder="You are a specialized agentic bridge..."
+                  className="bg-slate-900/50 border-slate-700 text-white text-xs min-h-[100px] focus-visible:ring-cyan-500/30"
+                />
+              </div>
 
-      <div className="flex gap-1 items-end">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => onShowAdvancedSettings(!showAdvancedSettings)}
-          className={`border-slate-600 ${showAdvancedSettings ? 'text-cyan-400 border-cyan-500/30' : 'text-slate-400'} hover:text-white h-8 px-2`}
-        >
-          <Settings className="w-3.5 h-3.5" />
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onRefreshModels}
-          className="border-slate-600 text-slate-400 hover:text-white h-8 px-2"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-        </Button>
-      </div>
-
-      {showAdvancedSettings && (
-        <div className="mb-3 p-3 rounded-lg bg-slate-900/50 border border-slate-700 space-y-3">
-          <div>
-            <Label className="text-xs text-slate-400">System Prompt</Label>
-            <Textarea
-              value={systemPrompt}
-              onChange={(e) => onSystemPromptChange(e.target.value)}
-              placeholder="You are a helpful assistant... (e.g., You are a specialized reasoning Qwen model...)"
-              className="mt-1 bg-slate-800 border-slate-600 text-white text-xs min-h-[80px]"
-            />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div>
-              <Label className="text-xs text-slate-400">Temperature: {chatTemperature}</Label>
-              <Slider
-                value={[chatTemperature]}
-                onValueChange={([v]) => onTemperatureChange(v)}
-                min={0} max={2} step={0.1}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label className="text-xs text-slate-400">Top P: {chatTopP}</Label>
-              <Slider
-                value={[chatTopP]}
-                onValueChange={([v]) => onTopPChange(v)}
-                min={0} max={1} step={0.05}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label className="text-xs text-slate-400">Min P: {chatMinP}</Label>
-              <Slider
-                value={[chatMinP]}
-                onValueChange={([v]) => onMinPChange(v)}
-                min={0} max={1} step={0.01}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label className="text-xs text-slate-400">Rep Penalty: {chatRepeatPenalty}</Label>
-              <Slider
-                value={[chatRepeatPenalty]}
-                onValueChange={([v]) => onRepeatPenaltyChange(v)}
-                min={1} max={2} step={0.05}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label className="text-xs text-slate-400">Max Tokens</Label>
-              <Input
-                type="number"
-                value={chatMaxTokens}
-                onChange={(e) => onMaxTokensChange(parseInt(e.target.value) || 2048)}
-                className="mt-1 h-7 bg-slate-800 border-slate-600 text-white text-xs"
-              />
-            </div>
-            <div>
-              <Label className="text-xs text-slate-400">Context Length</Label>
-              <Select value={String(chatContextLength)} onValueChange={(v) => onContextLengthChange(parseInt(v))}>
-                <SelectTrigger className="mt-1 h-7 bg-slate-800 border-slate-600 text-white text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700">
-                  <SelectItem value="2048" className="text-white text-xs">2K</SelectItem>
-                  <SelectItem value="4096" className="text-white text-xs">4K</SelectItem>
-                  <SelectItem value="8192" className="text-white text-xs">8K</SelectItem>
-                  <SelectItem value="16384" className="text-white text-xs">16K</SelectItem>
-                  <SelectItem value="32768" className="text-white text-xs">32K</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] text-slate-400">
+                      <span>Temp</span>
+                      <span className="text-cyan-400 font-mono">{chatTemperature}</span>
+                    </div>
+                    <Slider
+                      value={[chatTemperature]}
+                      onValueChange={([v]) => onTemperatureChange(v)}
+                      min={0} max={2} step={0.1}
+                      className="py-2"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] text-slate-400">
+                      <span>Top P</span>
+                      <span className="text-cyan-400 font-mono">{chatTopP}</span>
+                    </div>
+                    <Slider
+                      value={[chatTopP]}
+                      onValueChange={([v]) => onTopPChange(v)}
+                      min={0} max={1} step={0.05}
+                      className="py-2"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-3">
+                   <div className="flex flex-col gap-2">
+                    <Label className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Reasoning</Label>
+                    <div className="flex items-center gap-2 bg-slate-900/40 p-2 rounded-lg border border-slate-700">
+                      <Switch
+                        checked={chatThinkingMode}
+                        onCheckedChange={onThinkingModeChange}
+                        className="scale-75 origin-left"
+                      />
+                      <span className="text-[10px] text-slate-300">Force /think tags</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-slate-400">Context Window</Label>
+                    <Select value={String(chatContextLength)} onValueChange={(v) => onContextLengthChange(parseInt(v))}>
+                      <SelectTrigger className="h-7 bg-slate-900/50 border-slate-700 text-white text-[10px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-slate-700">
+                        <SelectItem value="2048">2K</SelectItem>
+                        <SelectItem value="4096">4K</SelectItem>
+                        <SelectItem value="8192">8K</SelectItem>
+                        <SelectItem value="16384">16K</SelectItem>
+                        <SelectItem value="32768">32K</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={chatThinkingMode}
-                onCheckedChange={onThinkingModeChange}
-              />
-              <Label className="text-xs text-slate-300">Thinking Mode (/think)</Label>
-            </div>
+        )}
+
+        {/* Input Area */}
+        <div className="relative group">
+          <Textarea
+            value={inputMessage}
+            onChange={(e) => onInputChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                onSend();
+              }
+            }}
+            placeholder="Describe the task or ask a question..."
+            className="bg-slate-800/50 border-slate-700 text-slate-100 placeholder:text-slate-500 focus-visible:ring-cyan-500/30 min-h-[60px] max-h-[200px] resize-none pr-16 py-4 rounded-2xl shadow-inner scrollbar-hide"
+          />
+          
+          <div className="absolute right-3 bottom-3 flex items-center gap-2">
+             <div className="text-[9px] font-mono text-slate-500 mr-2 flex flex-col items-end opacity-0 group-focus-within:opacity-100 transition-opacity">
+                <span>{inputMessage.length} chars</span>
+                <span>~{estimatedTokens} tokens</span>
+             </div>
+             
+             <Button 
+              onClick={onSend} 
+              disabled={isLoading || !inputMessage.trim() || !currentModel}
+              size="icon"
+              className={cn(
+                "h-10 w-10 rounded-xl transition-all duration-500",
+                inputMessage.trim() && currentModel 
+                  ? "bg-cyan-500 text-white shadow-[0_0_15px_rgba(6,182,212,0.4)] hover:shadow-[0_0_20px_rgba(6,182,212,0.6)]" 
+                  : "bg-slate-700 text-slate-500"
+              )}
+            >
+              <Send className="w-4 h-4" />
+            </Button>
           </div>
         </div>
-      )}
 
-      <div className="flex items-center gap-2 mb-2 text-xs text-slate-500">
-        {chatThinkingMode && <Badge className="bg-purple-500/20 text-purple-400 border-0 text-[10px]">THINK</Badge>}
-        <span>temp:{chatTemperature}</span>
-        <span>top_p:{chatTopP}</span>
-        <span>min_p:{chatMinP}</span>
-        <span>ctx:{chatContextLength >= 1024 ? `${chatContextLength/1024}K` : chatContextLength}</span>
-        <span>max:{chatMaxTokens}</span>
-      </div>
-
-      <div className="flex gap-2">
-        <Input
-          value={inputMessage}
-          onChange={(e) => onInputChange(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && onSend()}
-          placeholder="Type your message..."
-          className="bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-cyan-500/50"
-        />
-        <Button 
-          onClick={onSend} 
-          disabled={isLoading || !inputMessage.trim() || !currentModel}
-          className="bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 text-white"
-        >
-          <Send className="w-4 h-4" />
-        </Button>
+        {/* Footer shortcuts info */}
+        <div className="flex justify-center gap-4 text-[9px] text-slate-600 font-medium uppercase tracking-[0.2em]">
+          <span className="flex items-center gap-1"><Command className="w-2.5 h-2.5" /> + ENTER TO SEND</span>
+          <span className="flex items-center gap-1">SHIFT + ENTER FOR NEW LINE</span>
+        </div>
       </div>
     </div>
   )
