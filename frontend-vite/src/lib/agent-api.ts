@@ -23,3 +23,35 @@ export async function fetchWorklogs() {
   if (!res.ok) throw new Error('Failed to fetch worklogs');
   return res.json();
 }
+
+export async function fetchGatewayStatus() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/retrieve/gateway/status`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch { return null; }
+}
+
+export async function fetchKnowledgeStatus() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/embeddings/knowledge/status`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch { return null; }
+}
+
+export async function fetchProtocols() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/mcp/status`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch { return null; }
+}
+
+export async function fetchAgents() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/ace/agents`);
+    if (!res.ok) return { agents: [] };
+    return res.json();
+  } catch { return { agents: [] }; }
+}

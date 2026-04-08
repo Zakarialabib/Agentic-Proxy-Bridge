@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Zap, Search, Terminal, Gauge, ArrowRight, Play } from 'lucide-react'
+import { Zap, Search, Terminal, Gauge, ArrowRight, Play, Loader2 } from 'lucide-react'
 import type { EmbeddingPreset, MRLPreset, RerankerConfig, ChatTestPreset, GatewayTransformation } from '@/lib/types'
 
 interface GatewayPanelProps {
@@ -24,8 +24,9 @@ interface GatewayPanelProps {
   onPresetChange: (preset: string) => void
   onMRLChange: (mrl: string) => void
   onRerankerChange: (reranker: string) => void
-  onTestPresetChange: (presetId: string) => void
+  onTestPresetChange: (id: string) => void
   onRunTest: () => void
+  isSearching?: boolean
 }
 
 export function GatewayPanel({
@@ -46,6 +47,7 @@ export function GatewayPanel({
   onRerankerChange,
   onTestPresetChange,
   onRunTest,
+  isSearching = false
 }: GatewayPanelProps) {
   return (
     <div className="space-y-6">
@@ -71,8 +73,8 @@ export function GatewayPanel({
                   className="bg-slate-700 border-slate-600 text-white"
                   onKeyDown={(e) => e.key === 'Enter' && onSearch()}
                 />
-                <Button onClick={onSearch} className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30">
-                  <Search className="w-4 h-4" />
+                <Button onClick={onSearch} disabled={isSearching} className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30">
+                  {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                 </Button>
               </div>
             </div>
