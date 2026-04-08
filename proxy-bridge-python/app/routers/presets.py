@@ -134,12 +134,16 @@ async def autotune_presets(payload: Dict[str, Any]):
     results = payload.get("results", {})
     
     tuner = AdaptiveTuner(_presets_store)
-    updated_store = tuner.tune_from_results(test_type, results)
+    tune_result = tuner.tune_from_results(test_type, results)
     
-    _presets_store = updated_store
+    _presets_store = tune_result["presets"]
     _save_presets_store()
     
-    return {"status": "success", "message": "Presets updated based on test results"}
+    return {
+        "status": "success", 
+        "message": "Presets updated based on test results",
+        "rationales": tune_result["rationales"]
+    }
 
 @router.get("/chat-tests")
 async def get_chat_tests():

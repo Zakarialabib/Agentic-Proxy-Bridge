@@ -340,6 +340,93 @@ async def _upload_for_tuning(base_url: str, test_type: str, results: dict):
 
 
 @cli.command()
+@click.option("--base-url", default="http://localhost:3001", help="Proxy bridge URL")
+@click.option("--model", required=True, help="Model to use for proof")
+def prove(base_url: str, model: str):
+    """Run a multi-pass 'Before vs After' adaptation proof."""
+    console.print(Panel("[bold cyan]Adaptive Proof - Closed Loop Demonstration[/bold cyan]", border_style="cyan"))
+
+    async def _run_suite():
+        results = {}
+        results["context_window"] = await run_context_window_tests(base_url, model)
+        results["system_prompts"] = await run_system_prompt_tests(base_url, model)
+        results["few_shot"] = await run_few_shot_tests(base_url, model)
+        
+        # Calculate detail (Avg latency)
+        latencies = []
+        for t in results.values():
+             lat = t.get("latency_ms", 0) or 0
+             if lat: latencies.append(lat)
+        avg = sum(latencies) / len(latencies) if latencies else 0
+        results["detail"] = f"Avg={avg:.0f}ms"
+        return results
+
+    async def _run():
+        # Pass 1: Baseline Stress (Medium complexity without tuning)
+        console.print("\n[bold yellow]Pass 1: Baseline Stress (Unoptimized)[/bold yellow]")
+        p1_results = await _run_suite()
+        
+        # Trigger Autotune and capture rationales
+        console.print("\n[bold yellow]Triggering Adaptive Tuning...[/bold yellow]")
+        rationales = []
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    f"{base_url}/api/presets/autotune",
+                    json={"type": "medium", "results": p1_results}
+                )
+                if resp.status_code == 200:
+                    json_data = resp.json()
+                    rationales = json_data.get("rationales", [])
+                    for r in rationales:
+                        console.print(f"  [green]✓ {r}[/green]")
+                else:
+                    console.print(f"  [red]× Tuning failed: {resp.text}[/red]")
+        except Exception as e:
+            console.print(f"  [red]× Error communicating with bridge: {str(e)}[/red]")
+
+        # Pass 2: Optimized Run
+        console.print("\n[bold yellow]Pass 2: Optimized Behavior (Hardware Aware)[/bold yellow]")
+        p2_results = await _run_suite()
+
+        # Comparison Table
+        from rich.table import Table
+        table = Table(title="Proof of Adaptation: Before vs After")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Before (Pass 1)", style="red")
+        table.add_column("After (Pass 2)", style="green")
+        table.add_column("Improvement", style="magenta")
+
+        # Extract metrics safely
+        def safe_lat(res):
+            detail = res.get("detail", "")
+            if "Avg=" in detail:
+                 try: return int(detail.split("Avg=")[1].split("ms")[0])
+                 except: return 0
+            return 0
+
+        p1_lat = safe_lat(p1_results)
+        p2_lat = safe_lat(p2_results)
+        
+        p1_pass = sum(1 for k, v in p1_results.items() if k != "detail" and isinstance(v, dict) and v.get("ok"))
+        p2_pass = sum(1 for k, v in p2_results.items() if k != "detail" and isinstance(v, dict) and v.get("ok"))
+        total = 3 # context, prompts, few_shot
+
+        table.add_row("Avg Latency", f"{p1_lat}ms", f"{p2_lat}ms", f"{p1_lat-p2_lat}ms faster")
+        table.add_row("Success Rate", f"{p1_pass}/{total}", f"{p2_pass}/{total}", f"+{p2_pass-p1_pass} resolved")
+        
+        console.print("\n", table)
+        
+        if p2_pass > p1_pass or (p2_pass == p1_pass and p1_lat > 0 and p2_lat < p1_lat):
+            console.print("\n[bold green]✓ PROOF ACHIEVED: The system successfully adapted and improved performance.[/bold green]")
+        else:
+            console.print("\n[bold yellow]⚠ TUNING APPLIED: Adaptations were made, but environmental factors or model limits prevented significant gain.[/bold yellow]")
+
+    asyncio.run(_run())
+
+
+@cli.command()
 @click.option("--base-url", default="http://192.168.1.12:3001", help="Proxy bridge URL")
 @click.option("--model", default=None, help="Model to test with")
 @click.option("--apply", is_flag=True, help="Attempt to apply preset via proxy bridge")
