@@ -10,8 +10,8 @@ def estimate_tokens(text: str) -> int:
 def enforce_context_window(messages: List[Dict[str, Any]], max_tokens: int = 16000) -> List[Dict[str, Any]]:
     """
     Enforces a context window limit.
-    Preserves system prompt (first message if role is 'system').
-    Evicts oldest messages first if token count exceeds max_tokens.
+    Preserves system prompt and compresses older messages when exceeding budget
+    to leave headroom for tool results.
     """
     if not messages:
         return []
@@ -26,14 +26,15 @@ def enforce_context_window(messages: List[Dict[str, Any]], max_tokens: int = 160
     system_tokens = estimate_tokens(system_msg.get("content", "")) if system_msg else 0
     
     # Process from newest to oldest
-    # Increase safety buffer for local models which might have jitter in context length
-    budget = max_tokens - system_tokens - 1000  
+    # Increase safety buffer for local models and tool headroom
+    budget = max_tokens - system_tokens - 2000  
     if budget < 2000:
         # Guarantee at least some room for the user query, even if we have to squeeze
         budget = 2000
         
     retained_msgs = []
     current_tokens = 0
+    dropped_count = 0
     
     for msg in reversed(working_msgs):
         msg_content = msg.get("content", "")
@@ -49,13 +50,22 @@ def enforce_context_window(messages: List[Dict[str, Any]], max_tokens: int = 160
             retained_msgs.append(msg)
             current_tokens += msg_tokens
         else:
-            break
+            dropped_count += 1
             
     retained_msgs.reverse()
     
+    final_messages = []
     if system_msg:
-        return [system_msg] + retained_msgs
-    return retained_msgs
+        final_messages.append(system_msg)
+        
+    if dropped_count > 0:
+        final_messages.append({
+            "role": "system",
+            "content": f"[System Note: {dropped_count} older conversation turns were compressed to maintain tool context headroom.]"
+        })
+        
+    final_messages.extend(retained_msgs)
+    return final_messages
 
 def map_model_name(model: str) -> str:
     """

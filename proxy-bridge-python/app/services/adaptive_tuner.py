@@ -34,25 +34,65 @@ class AdaptiveTuner:
     def _tune_complex_tests(self, results: Dict[str, Any]) -> tuple[Dict[str, Any], List[str]]:
         updated_presets = self.presets.copy()
         rationales = []
+        
+        # Extract the spend_report from the results
+        spend_report = results.get("tests", {}).get("spend_report", {})
+        if not spend_report:
+            spend_report = results.get("spend_report", {})
+            
         benchmark = results.get("benchmark", {}) if "benchmark" in results else results.get("tests", {}).get("benchmark", {})
         
-        if not benchmark:
+        if not benchmark and not spend_report:
             return updated_presets
 
         tps = benchmark.get("tokens_per_sec", 0)
+        if tps == 0 and spend_report:
+            tps = spend_report.get("avg_tokens_per_sec", 0)
+            
         efficiency = benchmark.get("efficiency", "unknown")
         
         print(f"[AdaptiveTuner] Complex results: {tps} TPS, Efficiency: {efficiency}")
 
-        # Heuristic 4: Throughput-based tiering (Updated for realistic limits)
-        if tps < 10 and tps > 0:
-            msg = f"Low throughput ({tps} TPS) detected. Optimizing quantization and context constraints."
-            rationales.append(msg)
-            print(f"[AdaptiveTuner] {msg}")
-            for p in updated_presets.get("presets", []):
-                p["params"]["quantization_target"] = "Q4_K_S" if tps > 5 else "Q3_K_M"
-                p["params"]["context_window"] = min(p["params"].get("context_window", 4096), 4096)
-                p["description"] += f" (Optimized for low TPS: {tps})"
+        if spend_report and "by_test" in spend_report:
+            by_test = spend_report["by_test"]
+            reasoning_tps = by_test.get("reasoning", {}).get("tokens_per_sec", 0)
+            code_tps = by_test.get("code", {}).get("tokens_per_sec", 0)
+            short_tps = by_test.get("short", {}).get("tokens_per_sec", 0)
+            
+            # Detect Compute-Bound vs Memory-Bound
+            # If long context (reasoning) TPS is similar to short context (code) TPS, it's compute bound.
+            # If long context TPS drops significantly compared to short context, it's memory/bandwidth bound.
+            
+            if reasoning_tps > 0 and code_tps > 0:
+                tps_variance = abs(reasoning_tps - code_tps)
+                
+                if tps < 10:
+                    if tps_variance < 1.0:
+                        # Compute bound: consistent slow speed regardless of context size
+                        msg = f"Inference-bound workload detected (Consistent ~{reasoning_tps:.1f} TPS). Reducing quantization to speed up compute."
+                        rationales.append(msg)
+                        print(f"[AdaptiveTuner] {msg}")
+                        for p in updated_presets.get("presets", []):
+                            p["params"]["quantization_target"] = "Q4_K_S" if tps > 5 else "Q3_K_M"
+                            p["description"] += " (Compute-Bound Optimized)"
+                    else:
+                        # Memory/Bandwidth bound: speed degrades with context size
+                        msg = f"Memory-bound workload detected (High TPS variance: {code_tps:.1f} vs {reasoning_tps:.1f}). Capping context window and enabling sliding window attention."
+                        rationales.append(msg)
+                        print(f"[AdaptiveTuner] {msg}")
+                        for p in updated_presets.get("presets", []):
+                            p["params"]["context_window"] = min(p["params"].get("context_window", 4096), 4096)
+                            p["description"] += " (Memory-Bound Optimized)"
+        else:
+            # Fallback to standard heuristic if spend_report details are missing
+            if tps < 10 and tps > 0:
+                msg = f"Low throughput ({tps} TPS) detected. Optimizing quantization and context constraints."
+                rationales.append(msg)
+                print(f"[AdaptiveTuner] {msg}")
+                for p in updated_presets.get("presets", []):
+                    p["params"]["quantization_target"] = "Q4_K_S" if tps > 5 else "Q3_K_M"
+                    p["params"]["context_window"] = min(p["params"].get("context_window", 4096), 4096)
+                    p["description"] += f" (Optimized for low TPS: {tps})"
 
         return updated_presets, rationales
 
