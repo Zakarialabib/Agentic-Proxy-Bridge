@@ -32,11 +32,11 @@ async def create_chat_completion(request: ChatCompletionRequest):
             available_models = [m["id"] for m in models_resp.json().get("data", [])]
             if mapped_model not in available_models and mapped_model != "test-model":
                 return JSONResponse(
-                    status_code=404, 
+                    status_code=404,
                     content={"error": {"message": f"Model '{mapped_model}' not found", "type": "invalid_request_error", "code": "model_not_found"}}
                 )
     except Exception as e:
-        logger.warning("model_validation_failed", error=str(e))
+        print(f"[Chat] model_validation_failed: {str(e)}")
     
     # Context window engineering: Enforce tokens and preserve system prompt
     context_limit = payload.pop("contextWindow", 16000)

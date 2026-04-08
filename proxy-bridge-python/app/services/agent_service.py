@@ -9,6 +9,44 @@ from app.core.settings import settings
 
 MAX_REACT_STEPS = 10
 
+async def _compress_tool_result(result_str: str, tool_name: str, model_id: str) -> str:
+    """Active Compression Mode to summarize large tool results and prevent Amnesia."""
+    try:
+        client = connection_pool.get_client("openai")
+        headers = {"Content-Type": "application/json"}
+        prompt = f"Summarize this raw tool result from '{tool_name}' into a concise conclusion. Discard raw data and noise. Result:\n{result_str[:4000]}"
+        
+        payload = {
+            "model": model_id,
+            "messages": [
+                {"role": "system", "content": "[COGNITIVE MODE: COMPRESSION] You are a data compressor. Output only the summarized facts."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.1,
+            "max_tokens": 512,
+            "stream": False
+        }
+        
+        resp = await client.post(
+            f"{settings.lm_studio_base_url}/v1/chat/completions",
+            json=payload,
+            headers=headers,
+            timeout=15.0
+        )
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            summary = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            if summary:
+                print(f"[Agentic Bridge] Compression Mode active: Compressed {len(result_str)} chars to {len(summary)} chars.")
+                return f"[COMPRESSED SUMMARY]\n{summary}\n[END SUMMARY]"
+                
+    except Exception as e:
+        print(f"[Agentic Bridge] Compression Mode failed: {e}")
+        
+    # Fallback to truncation
+    return result_str[:500] + f"\n... [ToolResult truncated from {len(result_str)} chars]"
+
 async def intercept_and_execute_tools(
     initial_response: httpx.Response,
     original_payload: Dict[str, Any],
@@ -25,13 +63,18 @@ async def intercept_and_execute_tools(
     from app.services.context_manager import context_controller
 
     while recursive_hops < MAX_REACT_STEPS:
+        # --- Cognitive Mode Switch (Predictive Unloading) ---
+        is_router_mode = (recursive_hops < 2)
+        cognitive_mode = "router" if is_router_mode else "reasoning"
+        
         # Before each hop, adjust context based on accumulated tool payload
         tool_results_size = sum(
             len(msg.get("content", "")) 
             for msg in current_messages 
             if msg.get("role") == "user" and "<tool_response>" in msg.get("content", "")
         )
-        await context_controller.adjust_for_trajectory(recursive_hops, tool_results_size)
+        await context_controller.adjust_for_trajectory(recursive_hops, tool_results_size, cognitive_mode)
+        # ----------------------------------------------------
 
         recursive_hops += 1
         is_tool_call_mode = False
@@ -112,13 +155,18 @@ async def intercept_and_execute_tools(
                     if call_result.success:
                         result_str = str(call_result.result.get("content") if isinstance(call_result.result, dict) and "content" in call_result.result else call_result.result)
                         
-                        # --- Tool Memory Compression ---
-                        # For M4000/Legacy VRAM, truncate massive payloads
-                        if len(result_str) > 1500:
-                            truncated_len = len(result_str)
-                            result_str = result_str[:1500] + f"\n\n... [ToolResult truncated. {truncated_len - 1500} chars omitted to save context memory.]"
-                        
-                        content_val = result_str
+                        # --- Formal Compression Mode (Fixing Type B Amnesia) ---
+                        # Summarize massive tool payloads to preserve only conclusions,
+                        # reducing cognitive load and preventing context pollution on Hop 3.
+                        if len(result_str) > 500 and recursive_hops >= 2:
+                            model_id = original_payload.get("model", "qwen3.5-4b")
+                            content_val = await _compress_tool_result(result_str, tool_name, model_id)
+                        elif len(result_str) > 1500:
+                            # Fallback truncation if not compressed
+                            content_val = result_str[:1500] + f"\n\n... [ToolResult truncated. {len(result_str) - 1500} chars omitted to save context memory.]"
+                        else:
+                            content_val = result_str
+                        # -------------------------------------------------------
                     else:
                         content_val = f"Error: {call_result.error}"
                     
@@ -131,19 +179,25 @@ async def intercept_and_execute_tools(
                 else:
                     # JSON parsing failed or missing name, inject error and retry
                     error_msg = parse_error or "Invalid tool call format. Expected JSON with a 'name' field."
-                    current_messages.append({"role": "assistant", "content": tool_call_content})
+                    
+                    # --- Warm Start KV Cache Strategy (Rollback Points) ---
+                    # Do NOT append the hallucinated output or the error message to the context history.
+                    # We treat the context like a database transaction and rollback to keep the KV cache pure.
+                    print(f"[Agentic Bridge] Rollback Point triggered: Discarding invalid JSON to preserve KV cache. Error: {error_msg}")
+                    # ------------------------------------------------------
                     
                     # --- Breadcrumb Reinjection ---
                     reinject_str = ""
                     if breadcrumb:
-                        reinject_str = f"Previously, you thought: '{breadcrumb[:500]}...'\n"
-                        print("[Agentic Bridge] Reinjecting breadcrumb due to failure.")
+                        reinject_str = f" Previously, you thought: '{breadcrumb[:500]}...'\n"
+                        print("[Agentic Bridge] Reinjecting breadcrumb into system prompt due to failure.")
                     # ------------------------------
 
-                    current_messages.append({
-                        "role": "user",
-                        "content": f"System Error: Failed to parse tool call JSON. {error_msg}. {reinject_str}Please fix the JSON syntax and try again using strict <tool_call> tags."
-                    })
+                    # We inject a temporary system hint instead of appending a user message
+                    sys_msg_idx = next((i for i, m in enumerate(original_payload.get("messages", [])) if m["role"] == "system"), None)
+                    if sys_msg_idx is not None:
+                        base_sys = original_payload["messages"][sys_msg_idx]["content"]
+                        original_payload["messages"][sys_msg_idx]["content"] = base_sys + f"\n[SYSTEM HINT: Your previous attempt failed. {error_msg}.{reinject_str} Please use strict <tool_call> tags.]"
                     
                     # Force JSON mode on the next attempt to guarantee structural compliance
                     original_payload["response_format"] = {"type": "json_object"}
