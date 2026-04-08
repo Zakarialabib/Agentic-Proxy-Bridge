@@ -28,6 +28,7 @@ from cli.tests.complex.hardware_aware import run_hardware_aware_tests
 from cli.tests.complex.performance_benchmark import run_performance_benchmark_tests, print_performance_benchmark_summary
 from cli.tests.complex.stress_test import run_stress_tests, print_stress_test_summary
 from cli.tests.complex.model_comparison import run_model_comparison_tests, print_model_comparison_summary
+from cli.tests.complex.trajectory import run_trajectory_tests
 from cli.tests.complex.embedding_quality import run_embedding_quality_tests, print_embedding_quality_summary
 from cli.tests.full_stack.end_to_end import run_end_to_end_tests, print_end_to_end_summary
 from cli.tests.full_stack.rag_pipeline import run_rag_pipeline_tests, print_rag_pipeline_summary
@@ -342,7 +343,8 @@ async def _upload_for_tuning(base_url: str, test_type: str, results: dict):
 @cli.command()
 @click.option("--base-url", default="http://localhost:3001", help="Proxy bridge URL")
 @click.option("--model", required=True, help="Model to use for proof")
-def prove(base_url: str, model: str):
+@click.option("--trajectory", is_flag=True, help="Include multi-step trajectory evaluation")
+def prove(base_url: str, model: str, trajectory: bool):
     """Run a multi-pass 'Before vs After' adaptation proof."""
     console.print(Panel("[bold cyan]Adaptive Proof - Closed Loop Demonstration[/bold cyan]", border_style="cyan"))
 
@@ -351,6 +353,10 @@ def prove(base_url: str, model: str):
         results["context_window"] = await run_context_window_tests(base_url, model)
         results["system_prompts"] = await run_system_prompt_tests(base_url, model)
         results["few_shot"] = await run_few_shot_tests(base_url, model)
+        
+        if trajectory:
+            console.print("\n[yellow]Running trajectory evaluation...[/yellow]")
+            results["trajectory"] = await run_trajectory_tests(base_url, model)
         
         # Calculate detail (Avg latency)
         latencies = []
@@ -420,6 +426,11 @@ def prove(base_url: str, model: str):
         
         table.add_row("Multi-Turn Persistence", "Pass" if p1_sys is True else "Fail", "Pass" if p2_sys is True else "Fail", "Fixed" if (not p1_sys and p2_sys) else "Unchanged")
         
+        if trajectory:
+             p1_tcr = p1_results.get("trajectory", {}).get("tcr", 0)
+             p2_tcr = p2_results.get("trajectory", {}).get("tcr", 0)
+             table.add_row("Trajectory TCR", f"{p1_tcr*100:.0f}%", f"{p2_tcr*100:.0f}%", f"+{(p2_tcr-p1_tcr)*100:.0f}% completion")
+
         console.print("\n", table)
         
         # We consider proof achieved if ANY of the core agentic metrics improved

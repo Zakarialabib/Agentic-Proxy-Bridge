@@ -4,6 +4,7 @@ import re
 from typing import AsyncGenerator, List, Dict, Any, Optional
 from app.services.pool import connection_pool, ACTIVE_CONNECTIONS
 from app.services.tool_service import tool_registry
+from app.guardrails.validator import validator
 from app.core.settings import settings
 
 MAX_REACT_STEPS = 10
@@ -76,27 +77,10 @@ async def intercept_and_execute_tools(
             # Close the current response once processing finished
             await current_response.aclose()
             ACTIVE_CONNECTIONS.dec()
-
             if is_tool_call_mode:
-                # Parsing the tool call XML/JSON with auto-recovery loop
-                match = re.search(r"<tool_call>([\s\S]*?)</tool_call>", tool_call_buffer)
-                tool_data = None
-                tool_call_content = ""
-                parse_error = None
-                
-                try:
-                    if match:
-                        tool_call_content = match.group(0)
-                        tool_data = json.loads(match.group(1))
-                    else:
-                        tool_call_content = tool_call_buffer.strip()
-                        json_match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", tool_call_content)
-                        if json_match:
-                            tool_data = json.loads(json_match.group(1))
-                        else:
-                            tool_data = json.loads(tool_call_content)
-                except Exception as e:
-                    parse_error = str(e)
+                # NeMo-Style Guardrail Validation
+                is_valid, tool_data, parse_error = validator.validate_tool_call(tool_call_buffer)
+                tool_call_content = tool_call_buffer # Keep raw content for history
                 
                 if tool_data and isinstance(tool_data, dict) and tool_data.get("name"):
                     tool_name = tool_data["name"]
@@ -106,10 +90,15 @@ async def intercept_and_execute_tools(
                     call_result = await tool_registry.execute(tool_name, args)
                     
                     if call_result.success:
-                        if isinstance(call_result.result, dict) and "content" in call_result.result:
-                            content_val = call_result.result["content"]
-                        else:
-                            content_val = call_result.result
+                        result_str = str(call_result.result.get("content") if isinstance(call_result.result, dict) and "content" in call_result.result else call_result.result)
+                        
+                        # --- Tool Memory Compression ---
+                        # For M4000/Legacy VRAM, truncate massive payloads
+                        if len(result_str) > 1500:
+                            truncated_len = len(result_str)
+                            result_str = result_str[:1500] + f"\n\n... [ToolResult truncated. {truncated_len - 1500} chars omitted to save context memory.]"
+                        
+                        content_val = result_str
                     else:
                         content_val = f"Error: {call_result.error}"
                     
@@ -127,6 +116,9 @@ async def intercept_and_execute_tools(
                         "role": "user",
                         "content": f"System Error: Failed to parse tool call JSON. {error_msg}. Please fix the JSON syntax and try again using strict <tool_call> tags."
                     })
+                    
+                    # Force JSON mode on the next attempt to guarantee structural compliance
+                    original_payload["response_format"] = {"type": "json_object"}
                     
                 # Retry logic for both success (continue agent loop) and failure (fix JSON)
                 from app.services.context_builder import enforce_context_window
