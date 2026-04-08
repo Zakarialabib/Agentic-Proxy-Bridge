@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronUp, Sparkles, User, Terminal } from "lucide-react"
+import { ChevronDown, ChevronUp, Sparkles, User, Terminal, Activity, RotateCcw, BrainCircuit, Minimize2 } from "lucide-react"
 import { useState } from "react"
 import { ToolArtifact } from "./ToolArtifact"
 
@@ -10,9 +10,10 @@ interface MessageBubbleProps {
   content: string
   modelUsed?: string
   isLast?: boolean
+  telemetry?: Array<{ event: string, details: string, timestamp: number }>
 }
 
-export function MessageBubble({ role, content, modelUsed, isLast }: MessageBubbleProps) {
+export function MessageBubble({ role, content, modelUsed, isLast, telemetry }: MessageBubbleProps) {
   const [isReasoningOpen, setIsReasoningOpen] = useState(true)
 
   // Parse reasoning/thought tags
@@ -116,6 +117,30 @@ export function MessageBubble({ role, content, modelUsed, isLast }: MessageBubbl
               </div>
             </CollapsibleContent>
           </Collapsible>
+        )}
+
+        {/* Telemetry Block */}
+        {telemetry && telemetry.length > 0 && (
+          <div className="mb-4 space-y-1.5 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+            <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <Activity className="w-3 h-3" /> Agentic Telemetry
+            </div>
+            {telemetry.map((t, idx) => (
+              <div key={idx} className="flex items-start gap-2 text-xs">
+                {t.event === 'mode_switch' && <BrainCircuit className="w-3.5 h-3.5 text-cyan-400 mt-0.5 flex-shrink-0" />}
+                {t.event === 'rollback' && <RotateCcw className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />}
+                {t.event === 'compression' && <Minimize2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />}
+                {t.event === 'breadcrumb' && <Terminal className="w-3.5 h-3.5 text-purple-400 mt-0.5 flex-shrink-0" />}
+                <span className={cn(
+                  "flex-1",
+                  t.event === 'rollback' ? "text-amber-300" :
+                  t.event === 'mode_switch' ? "text-cyan-300" :
+                  t.event === 'compression' ? "text-emerald-300" :
+                  "text-slate-300"
+                )}>{t.details}</span>
+              </div>
+            ))}
+          </div>
         )}
 
         <div className="text-[14px] scroll-mt-20">

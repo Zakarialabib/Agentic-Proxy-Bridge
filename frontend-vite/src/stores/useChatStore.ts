@@ -5,6 +5,7 @@ interface ChatMessage {
   content: string
   timestamp: number
   modelUsed?: string
+  telemetry?: Array<{ event: string, details: string, timestamp: number }>
 }
 
 interface ChatState {
@@ -110,6 +111,24 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
+              
+              if (data.type === 'telemetry') {
+                set((state) => {
+                  const msgs = [...state.messages]
+                  const lastMsg = msgs[msgs.length - 1]
+                  if (lastMsg && lastMsg.role === 'assistant') {
+                    if (!lastMsg.telemetry) lastMsg.telemetry = []
+                    lastMsg.telemetry.push({
+                      event: data.event,
+                      details: data.details,
+                      timestamp: Date.now()
+                    })
+                  }
+                  return { messages: msgs }
+                })
+                continue
+              }
+
               const delta = data.choices?.[0]?.delta?.content
               if (delta) {
                 assistantContent += delta

@@ -46,10 +46,10 @@ export function AutoConfigTuner({ model, isOpen, onClose, onApply }: AutoConfigT
           setInitialPreset(preset)
           
           // Set initial slider values from the preset
-          const offload = preset.params?.gpu_offload || 0
+          const offload = Number(preset.params?.gpu_offload || 0)
           setGpuLayers(offload === 1.0 ? -1 : Math.floor(32 * offload))
-          setContextLength(preset.params?.context_window || 2048)
-          setQuantization(preset.params?.quantization_target || 'Q4_K_M')
+          setContextLength(Number(preset.params?.context_window || 2048))
+          setQuantization(String(preset.params?.quantization_target || 'Q4_K_M'))
         }
         setIsLoading(false)
       }).catch(err => {
@@ -80,7 +80,8 @@ export function AutoConfigTuner({ model, isOpen, onClose, onApply }: AutoConfigT
       setBenchmarkProgress(100)
       
       // Determine simulated TPS based on hardware
-      const isMaxwell = (hardware?.gpu_name || '').toLowerCase().includes('m4000') || (hardware?.gpu_name || '').toLowerCase().includes('maxwell')
+      const hwObj = hardware as any
+      const isMaxwell = (hwObj?.gpu_name || '').toLowerCase().includes('m4000') || (hwObj?.gpu_name || '').toLowerCase().includes('maxwell')
       const simulatedTps = isMaxwell ? 7.7 : 42.5
       
       const testPayload = {
@@ -151,9 +152,9 @@ export function AutoConfigTuner({ model, isOpen, onClose, onApply }: AutoConfigT
                   <div>
                     <p className="text-sm font-semibold">Detected Environment</p>
                     <p className="text-xs text-slate-400">
-                      {hardware?.gpu_name || 'CPU Only'}
+                      {(hardware as any)?.gpu_name || 'CPU Only'}
                       {' • '}
-                      {hardware?.gpu_vram_gb ? `${hardware.gpu_vram_gb}GB VRAM` : `${hardware?.system_ram_gb}GB RAM`}
+                      {(hardware as any)?.gpu_vram_gb ? `${(hardware as any).gpu_vram_gb}GB VRAM` : `${(hardware as any)?.system_ram_gb}GB RAM`}
                     </p>
                   </div>
                 </div>
