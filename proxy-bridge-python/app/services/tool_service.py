@@ -104,6 +104,33 @@ class ToolRegistry:
             for tool in self._tools.values()
         ]
 
+    def list_tools_xml(self) -> str:
+        """List all registered tools in compact XML format."""
+        return tools_to_xml(self.list_tools())
+
+
+def tools_to_xml(tools: List[Dict[str, Any]]) -> str:
+    """Convert a list of OpenAI-format tools to compact XML."""
+    xml_parts = ["<tools>"]
+    for t in tools:
+        func = t.get("function", {})
+        name = func.get("name", "")
+        desc = func.get("description", "")
+        xml_parts.append(f'<tool name="{name}" description="{desc}">')
+        params = func.get("parameters", {}).get("properties", {})
+        req = func.get("parameters", {}).get("required", [])
+        if params:
+            xml_parts.append('<parameters>')
+            for pname, pinfo in params.items():
+                ptype = pinfo.get("type", "string")
+                pdesc = pinfo.get("description", "")
+                preq = "true" if pname in req else "false"
+                xml_parts.append(f'<param name="{pname}" type="{ptype}" required="{preq}" description="{pdesc}"/>')
+            xml_parts.append('</parameters>')
+        xml_parts.append('</tool>')
+    xml_parts.append("</tools>")
+    return "".join(xml_parts)
+
     async def execute(self, tool_name: str, arguments: Dict[str, Any]) -> ToolCallResult:
         """Execute a tool with given arguments."""
         tool = self._tools.get(tool_name)

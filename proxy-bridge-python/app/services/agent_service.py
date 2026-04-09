@@ -88,8 +88,6 @@ def _looks_like_tool_block(content: str) -> bool:
         return False
     if "<tool_call>" in content:
         return True
-    if "```" in content and ("\"name\"" in content or "\"arguments\"" in content or "{" in content):
-        return True
     return False
 
 
@@ -101,6 +99,35 @@ def _classify_tool(tool: Dict[str, Any]) -> str:
     if any(token in name for token in ("mcp", "web_search", "knowledge", "file_", "read_file", "write_file", "calculate", "get_current_time", "search")):
         return "mcp"
     return "local"
+
+
+def normalize_system_prompt_and_tools(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    """Ensure system prompt/tools are static at index 0 and strip timestamps."""
+    system_contents = []
+    other_messages = []
+    
+    for msg in messages:
+        if msg.get("role") == "system":
+            content = str(msg.get("content", ""))
+            # Strip timestamps
+            content = re.sub(r"\[\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?\]", "", content)
+            content = re.sub(r"\[\d{1,2}/\d{1,2}/\d{2,4}[, ]+\d{1,2}:\d{2}:\d{2}(?:\s*[APap][Mm])?\]", "", content)
+            content = re.sub(r"\[\d{2}:\d{2}:\d{2}\]", "", content)
+            content = re.sub(r"\b\d{2}:\d{2}:\d{2}\b", "", content) # standalone time
+            system_contents.append(content.strip())
+        else:
+            other_messages.append(msg)
+            
+    base_system = "\n\n".join(system_contents).strip()
+    
+    if tools:
+        from app.services.tool_service import tools_to_xml
+        xml_tools = tools_to_xml(tools)
+        base_system = f"{base_system}\n\nAvailable Tools:\n{xml_tools}".strip()
+        
+    if base_system:
+        return [{"role": "system", "content": base_system}] + other_messages
+    return other_messages
 
 
 def build_orchestration_profile(mode: Optional[str]) -> Dict[str, Any]:
@@ -134,8 +161,13 @@ def prioritize_tools_for_mode(tools: List[Dict[str, Any]], mode: Optional[str]) 
 def build_orchestration_system_prompt(mode: Optional[str]) -> str:
     profile = build_orchestration_profile(mode)
     tool_format = (
-        "Tool calls should use: <tool_call>{\"name\": \"tool_name\", \"arguments\": { ... }}</tool_call>. "
-        "If a client enforces code blocks, use: ```tool_name\\n{\"arguments\": { ... }}\\n```. "
+        "Tool calls should use XML format:\n"
+        "<tool_call>\n"
+        "  <name>tool_name</name>\n"
+        "  <arguments>\n"
+        "    <arg_name>value</arg_name>\n"
+        "  </arguments>\n"
+        "</tool_call>\n"
         "Do not invent file paths. If a path is unknown, call file_list first or ask the user."
     )
     return f"{profile['system_prompt']}\n{tool_format}"
@@ -303,6 +335,9 @@ async def intercept_and_execute_tools(
                                     "choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "id": f"call_{recursive_hops}", "type": "function", "function": function_delta}]}, "finish_reason": None}]
                                 }
                                 yield f"data: {json.dumps(tool_call_delta)}\n\n".encode("utf-8")
+
+                                if "</tool_call>" in tool_call_buffer:
+                                    break
                             else:
                                 assistant_content += content
                                 yield (line + "\n\n").encode("utf-8")
@@ -312,9 +347,15 @@ async def intercept_and_execute_tools(
                     except Exception:
                         if not is_tool_call_mode:
                             yield (line + "\n\n").encode("utf-8")
+                
+                if is_tool_call_mode and "</tool_call>" in tool_call_buffer:
+                    break
             
             # Close the current response once processing finished
-            await current_response.aclose()
+            try:
+                await current_response.aclose()
+            except Exception:
+                pass
             ACTIVE_CONNECTIONS.dec()
             
             if finish_reason == "length" and not is_tool_call_mode:
@@ -407,7 +448,7 @@ async def intercept_and_execute_tools(
                     })
                 else:
                     # JSON parsing failed or missing name, inject error and retry
-                    error_msg = parse_error or "Invalid tool call format. Expected JSON with a 'name' field."
+                    error_msg = parse_error or "Invalid tool call format. Expected XML format with a <name> field."
                     
                     # --- Warm Start KV Cache Strategy (Rollback Points) ---
                     # Do NOT append the hallucinated output or the error message to the context history.
@@ -423,14 +464,13 @@ async def intercept_and_execute_tools(
                         print("[Agentic Bridge] Reinjecting breadcrumb into system prompt due to failure.")
                     # ------------------------------
 
-                    # We inject a temporary system hint instead of appending a user message
-                    sys_msg_idx = next((i for i, m in enumerate(original_payload.get("messages", [])) if m["role"] == "system"), None)
-                    if sys_msg_idx is not None:
-                        base_sys = original_payload["messages"][sys_msg_idx]["content"]
-                        original_payload["messages"][sys_msg_idx]["content"] = base_sys + f"\n[SYSTEM HINT: Your previous attempt failed. {error_msg}.{reinject_str} Please use strict <tool_call> tags.]"
+                    # We inject a temporary hint instead of modifying the system prompt to maintain KV cache
+                    hint_msg = f"[SYSTEM HINT: Your previous attempt failed. {error_msg}.{reinject_str} Please use strict <tool_call> tags.]"
+                    current_messages.append({"role": "user", "content": hint_msg})
                     
                     # Force JSON mode on the next attempt to guarantee structural compliance
-                    original_payload["response_format"] = {"type": "json_object"}
+                    # original_payload["response_format"] = {"type": "json_object"}
+                    pass
                     
                 # Retry logic for both success (continue agent loop) and failure (fix JSON)
                 from app.services.context_builder import enforce_context_window
@@ -455,11 +495,13 @@ async def intercept_and_execute_tools(
                     # --- GBNF Grammar Injection ---
                     # Extract the intended tool name from the failed buffer
                     import re
-                    name_match = re.search(r'"name"\s*:\s*"([^"]+)"', tool_call_buffer)
+                    name_match = re.search(r'<(?:name|tool_name)>\s*([^<]+)\s*</(?:name|tool_name)>', tool_call_buffer)
+                    if not name_match:
+                        name_match = re.search(r'"name"\s*:\s*"([^"]+)"', tool_call_buffer)
                     if name_match:
-                        intended_tool_name = name_match.group(1)
-                        # Find the schema for the intended tool in the original payload
-                        available_tools = original_payload.get("tools", [])
+                        intended_tool_name = name_match.group(1).strip()
+                        # Find the schema for the intended tool
+                        available_tools = original_payload.get("tools") or tool_registry.list_tools()
                         expected_tool = None
                         for t in available_tools:
                             if t.get("function", {}).get("name") == intended_tool_name:
@@ -490,22 +532,22 @@ async def intercept_and_execute_tools(
                 # Reasoning Mode: Deep thought (Hop 2+)
                 is_router_mode = (recursive_hops < 2)
                 
-                sys_msg_idx = next((i for i, m in enumerate(follow_up_payload["messages"]) if m["role"] == "system"), None)
-                if sys_msg_idx is not None:
-                    base_sys = follow_up_payload["messages"][sys_msg_idx]["content"]
-                    # Strip previous mode instructions
-                    base_sys = re.sub(r"\[COGNITIVE MODE: .*?\]\n", "", base_sys)
-                    
-                    if is_router_mode:
-                        follow_up_payload["messages"][sys_msg_idx]["content"] = "[COGNITIVE MODE: ROUTER]\nPick exactly one tool to use next. Do not provide any explanations or <think> blocks. Output only the tool call.\n" + base_sys
-                        follow_up_payload["max_tokens"] = min(follow_up_payload.get("max_tokens", 2048), 512)
-                        print(f"[Agentic Bridge] Switching to ROUTER MODE (Hop {recursive_hops})")
-                        yield _telemetry_bytes("mode_switch", f"Hop {recursive_hops}: Switching to ROUTER MODE. Freezing deep layers to save VRAM.")
-                    else:
-                        follow_up_payload["messages"][sys_msg_idx]["content"] = "[COGNITIVE MODE: REASONING]\nThink step-by-step using <think> blocks before acting. Evaluate the previous tool results carefully.\n" + base_sys
-                        follow_up_payload["max_tokens"] = max(follow_up_payload.get("max_tokens", 2048), 2048)
-                        print(f"[Agentic Bridge] Switching to REASONING MODE (Hop {recursive_hops})")
-                        yield _telemetry_bytes("mode_switch", f"Hop {recursive_hops}: Switching to REASONING MODE. Thawing deep layers for complex thought.")
+                if is_router_mode:
+                    follow_up_payload["messages"].append({
+                        "role": "user",
+                        "content": "[COGNITIVE MODE: ROUTER]\nPick exactly one tool to use next. Do not provide any explanations or <think> blocks. Output only the tool call."
+                    })
+                    follow_up_payload["max_tokens"] = min(follow_up_payload.get("max_tokens", 2048), 512)
+                    print(f"[Agentic Bridge] Switching to ROUTER MODE (Hop {recursive_hops})")
+                    yield _telemetry_bytes("mode_switch", f"Hop {recursive_hops}: Switching to ROUTER MODE. Freezing deep layers to save VRAM.")
+                else:
+                    follow_up_payload["messages"].append({
+                        "role": "user",
+                        "content": "[COGNITIVE MODE: REASONING]\nThink step-by-step using <think> blocks before acting. Evaluate the previous tool results carefully."
+                    })
+                    follow_up_payload["max_tokens"] = max(follow_up_payload.get("max_tokens", 2048), 2048)
+                    print(f"[Agentic Bridge] Switching to REASONING MODE (Hop {recursive_hops})")
+                    yield _telemetry_bytes("mode_switch", f"Hop {recursive_hops}: Switching to REASONING MODE. Thawing deep layers for complex thought.")
                 # -----------------------------
 
                 if tool_budget_remaining <= 0:

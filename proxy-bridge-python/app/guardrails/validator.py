@@ -10,44 +10,57 @@ class JsonGuardrail:
     @staticmethod
     def validate_tool_call(content: str) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """
-        Validates if the content contains a valid JSON tool call with 'name' and 'arguments'.
+        Validates if the content contains a valid XML tool call with 'name' and 'arguments'.
         Returns (is_valid, parsed_data, error_message).
         """
         try:
-            # Try to find JSON block in case there's surrounding text
-            json_match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", content)
-            if not json_match:
-                return False, None, "No JSON object found in the content."
+            # Fallback to JSON if it looks like JSON
+            if "{" in content and "}" in content and "<tool_call>" not in content:
+                json_match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", content)
+                if json_match:
+                    raw_json = json_match.group(1)
+                    data = json.loads(raw_json)
+                    if isinstance(data, list):
+                        if not data:
+                            return False, None, "Empty tool call list."
+                        data = data[0]
+                    if not isinstance(data, dict):
+                        return False, None, f"Tool call must be an object, got {type(data).__name__}."
+                    if "name" not in data:
+                        return False, None, "Missing mandatory field 'name' in tool call."
+                    return True, data, None
+
+            # Parse XML
+            name_match = re.search(r"<name>\s*(.*?)\s*</name>", content, re.DOTALL)
+            if not name_match:
+                return False, None, "Missing mandatory field <name> in XML tool call."
             
-            raw_json = json_match.group(1)
-            data = json.loads(raw_json)
+            tool_name = name_match.group(1).strip()
             
-            if isinstance(data, list):
-                # Handle potential list of calls
-                if not data:
-                    return False, None, "Empty tool call list."
-                data = data[0]
-            
-            if not isinstance(data, dict):
-                return False, None, f"Tool call must be a JSON object, got {type(data).__name__}."
-            
-            # NeMo requirement: Presence of 'name'
-            if "name" not in data:
-                fence_match = re.search(r"```([a-zA-Z0-9_.-]+)", content)
-                if fence_match:
-                    data["name"] = fence_match.group(1)
-                else:
-                    return False, None, "Missing mandatory field 'name' in tool call."
-            
-            # Arguments can be optional or empty, but should be a dict if present
-            args = data.get("arguments") or data.get("parameters")
-            if args is not None and not isinstance(args, dict):
-                return False, None, f"'arguments' must be a dictionary, got {type(args).__name__}."
-                
+            args = {}
+            args_match = re.search(r"<arguments>\s*(.*?)\s*</arguments>", content, re.DOTALL)
+            if args_match:
+                args_content = args_match.group(1).strip()
+                if args_content.startswith("{") and args_content.endswith("}"):
+                    try:
+                        args = json.loads(args_content)
+                    except:
+                        pass
+                if not args:
+                    # Parse simple tags: <arg_name>value</arg_name>
+                    for arg_match in re.finditer(r"<([^>]+)>\s*(.*?)\s*</\1>", args_content, re.DOTALL):
+                        arg_name = arg_match.group(1).strip()
+                        arg_value = arg_match.group(2).strip()
+                        args[arg_name] = arg_value
+
+            data = {
+                "name": tool_name,
+                "arguments": args
+            }
             return True, data, None
             
         except json.JSONDecodeError as e:
-            return False, None, f"JSON syntax error: {str(e)}"
+            return False, None, f"Syntax error: {str(e)}"
         except Exception as e:
             return False, None, f"Unexpected validation error: {str(e)}"
 

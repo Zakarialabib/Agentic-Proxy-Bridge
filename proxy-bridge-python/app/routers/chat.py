@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 import time
 from app.schemas import ChatCompletionRequest
 from app.services.pool import connection_pool, ACTIVE_CONNECTIONS
-from app.services.agent_service import intercept_and_execute_tools
+from app.services.agent_service import intercept_and_execute_tools, normalize_system_prompt_and_tools
 from app.services.context_builder import enforce_context_window, map_model_name
 from app.core.settings import settings
 import httpx
@@ -70,28 +70,31 @@ async def create_chat_completion(request: ChatCompletionRequest):
     
     # Context window engineering: Enforce tokens and preserve system prompt
     context_limit = payload.pop("contextWindow", payload.pop("context_window", 16000))
+    
+    # Normalize system prompt to index 0, strip timestamps, and serialize tools to XML
+    tools_list = payload.get("tools")
+    payload["messages"] = normalize_system_prompt_and_tools(payload.get("messages", []), tools_list)
+    if "tools" in payload:
+        del payload["tools"]
+
     payload["messages"] = enforce_context_window(payload.get("messages", []), max_tokens=context_limit)
 
     if payload.get("max_tokens") is None:
         payload["max_tokens"] = min(max(context_limit // 2, 512), max(context_limit, 512))
 
     # --- Cognitive Mode Switch (Initial Hop) ---
-    if "tools" in payload and payload["tools"]:
-        sys_msg_idx = next((i for i, m in enumerate(payload["messages"]) if m["role"] == "system"), None)
-        if sys_msg_idx is not None:
-            base_sys = payload["messages"][sys_msg_idx]["content"]
-            payload["messages"][sys_msg_idx]["content"] = "[COGNITIVE MODE: ROUTER]\nPick exactly one tool to use next. Do not provide any explanations or <think> blocks. Output only the tool call.\n" + base_sys
-            payload["max_tokens"] = min(payload.get("max_tokens", 2048), 512)
-            print("[Agentic Bridge] Initial Request: Switching to ROUTER MODE")
+    if tools_list:
+        payload["messages"].append({
+            "role": "user",
+            "content": "[COGNITIVE MODE: ROUTER]\nPick exactly one tool to use next. Do not provide any explanations or <think> blocks. Output only the tool call."
+        })
+        payload["max_tokens"] = min(payload.get("max_tokens", 2048), 512)
+        print("[Agentic Bridge] Initial Request: Switching to ROUTER MODE")
     # ------------------------------------------
 
     if request.stream:
         ACTIVE_CONNECTIONS.inc()
         try:
-            original_messages = [
-                m.model_dump() if hasattr(m, "model_dump") else m
-                for m in (request.messages or [])
-            ]
             req = client.build_request(
                 "POST",
                 f"{settings.lm_studio_base_url}/v1/chat/completions",
@@ -101,9 +104,16 @@ async def create_chat_completion(request: ChatCompletionRequest):
             response = await client.send(req, stream=True)
             response.raise_for_status()
             
-            # Use the agentic interceptor for streaming
+            async def stream_with_intercept():
+                async for chunk in intercept_and_execute_tools(
+                    response,
+                    payload,
+                    payload["messages"]
+                ):
+                    yield chunk
+                    
             return StreamingResponse(
-                intercept_and_execute_tools(response, payload, original_messages),
+                stream_with_intercept(),
                 media_type="text/event-stream"
             )
         except httpx.HTTPStatusError as e:
