@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 import asyncio
+import os
 from typing import Any, Callable, Dict, List, Optional
 from dataclasses import dataclass, field
 
@@ -28,6 +29,9 @@ class ToolCallResult:
     execution_time_ms: float = 0.0
 
 
+TOOL_REGISTRY_SYNC_ENABLED = os.environ.get("LMSTUDIO_TOOL_REGISTRY_SYNC", "false").lower() in ("1", "true", "yes")
+_tool_registry_sync_disabled = False
+
 class ToolRegistry:
     """Registry for tool definitions and handlers."""
 
@@ -40,11 +44,17 @@ class ToolRegistry:
         self._tools[tool.name] = tool
         
         # Async push to LM Studio's native tool ecosystem
+        if not TOOL_REGISTRY_SYNC_ENABLED:
+            return
+        global _tool_registry_sync_disabled
+        if _tool_registry_sync_disabled:
+            return
         try:
             import httpx
             import threading
             
             def _sync_tool():
+                global _tool_registry_sync_disabled
                 try:
                     from app.core.settings import settings
                     base_url = settings.lm_studio_base_url
@@ -57,14 +67,20 @@ class ToolRegistry:
                         }
                     }
                     # Fire and forget
-                    httpx.post(f"{base_url}/v0/tools/register", json=payload, timeout=2.0)
+                    resp = httpx.post(f"{base_url}/v0/tools/register", json=payload, timeout=2.0)
+                    if resp.status_code >= 400:
+                        _tool_registry_sync_disabled = True
+                        print("[Native Tool Registry] Disabled sync (endpoint unsupported).")
+                        return
                     print(f"[Native Tool Registry] Synced tool '{tool.name}' to LM Studio")
                 except Exception:
-                    pass
+                    _tool_registry_sync_disabled = True
+                    print("[Native Tool Registry] Disabled sync (request failed).")
             
             threading.Thread(target=_sync_tool, daemon=True).start()
         except Exception:
-            pass
+            _tool_registry_sync_disabled = True
+            print("[Native Tool Registry] Disabled sync (init failed).")
 
     def unregister(self, name: str):
         """Unregister a tool by name."""

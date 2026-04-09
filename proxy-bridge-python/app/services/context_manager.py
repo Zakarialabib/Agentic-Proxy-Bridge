@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import time
-import httpx
-import asyncio
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 from app.core.settings import settings
+from app.adapters.lmstudio import LMStudioAdapter
 
 
 @dataclass
@@ -196,21 +195,26 @@ class LMStudioContextController:
     def __init__(self, base_url: str = None):
         self.base_url = base_url or settings.lm_studio_base_url
         self.current_context = 4096  # Start conservative
-        self.current_gpu_offload = "max"  # Assume fully offloaded by default
+        self.current_gpu_layers = 32  # Assume a full layer budget until tuned
+        self.current_model_id: Optional[str] = None
         
-    async def adjust_for_trajectory(self, hop_count: int, tool_results_size: int, cognitive_mode: str = "reasoning"):
+    async def adjust_for_trajectory(
+        self,
+        hop_count: int,
+        tool_results_size: int,
+        cognitive_mode: str = "reasoning",
+        model_id: Optional[str] = None,
+    ):
         """
         Dynamically adjust LM Studio's context window and gpu_offload based on agent state.
         """
-        # Predictive Unloading: Freeze deeper layers during simple router tasks
-        if cognitive_mode == "router":
-            new_offload = 16 # Offload fewer layers to save VRAM and speed up
-        else:
-            new_offload = "max" # Thaw all layers for reasoning/compression
-            
-        if new_offload != self.current_gpu_offload:
-            await self._set_gpu_offload(new_offload)
-            self.current_gpu_offload = new_offload
+        if model_id:
+            self.current_model_id = model_id
+
+        target_layers = 16 if cognitive_mode == "router" else 32
+        if target_layers != self.current_gpu_layers and self.current_model_id:
+            await self._set_gpu_layers(target_layers)
+            self.current_gpu_layers = target_layers
 
         # Context Window Adjustments
         if hop_count > 2 and tool_results_size > 1000:
@@ -222,41 +226,43 @@ class LMStudioContextController:
         else:
             new_context = self.current_context
             
-        if new_context != self.current_context:
+        if new_context != self.current_context and self.current_model_id:
             await self._set_context_length(new_context)
             self.current_context = new_context
             
-    async def _set_gpu_offload(self, offload: Any):
+    async def _set_gpu_layers(self, layers: int):
         """
-        Dynamically adjusts LM Studio's gpu_offload parameter to freeze/thaw layers.
+        Dynamically adjusts the active model by reloading it with a different GPU layer budget.
         """
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.post(
-                    f"{self.base_url}/v0/models/loaded/config",
-                    json={"gpu_offload": offload}
+            async with LMStudioAdapter(base_url=self.base_url) as adapter:
+                if not self.current_model_id:
+                    print("[Predictive Unloading] No active model id available for gpu layer tuning")
+                    return
+                await adapter.load_model(
+                    self.current_model_id,
+                    gpu_layers=layers,
+                    context_length=self.current_context,
                 )
-                if resp.status_code == 200:
-                    print(f"[Predictive Unloading] Adjusted LM Studio gpu_offload to {offload}")
-                else:
-                    print(f"[Predictive Unloading] Failed to adjust gpu_offload: {resp.status_code}")
+                print(f"[Predictive Unloading] Reloaded {self.current_model_id} with gpu_layers={layers}")
         except Exception as e:
-            print(f"[Predictive Unloading] Error adjusting gpu_offload: {str(e)}")
+            print(f"[Predictive Unloading] Error adjusting gpu_layers: {str(e)}")
             
     async def _set_context_length(self, length: int):
         """
-        LM Studio API endpoint for dynamic configuration.
+        Reload the active model with a new context length.
         """
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.post(
-                    f"{self.base_url}/v0/models/loaded/config",
-                    json={"context_length": length}
+            async with LMStudioAdapter(base_url=self.base_url) as adapter:
+                if not self.current_model_id:
+                    print("[Agentic Bridge] No active model id available for context tuning")
+                    return
+                await adapter.load_model(
+                    self.current_model_id,
+                    context_length=length,
+                    gpu_layers=self.current_gpu_layers,
                 )
-                if resp.status_code == 200:
-                    print(f"[Agentic Bridge] Dynamically adjusted LM Studio context length to {length}")
-                else:
-                    print(f"[Agentic Bridge] Failed to adjust context length: {resp.status_code}")
+                print(f"[Agentic Bridge] Reloaded {self.current_model_id} with context_length={length}")
         except Exception as e:
             print(f"[Agentic Bridge] Error adjusting context length: {str(e)}")
 

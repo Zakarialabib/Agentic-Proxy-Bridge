@@ -54,8 +54,9 @@ import type {
   SSEChannel,
   ScoredChunk
 } from './types'
+import { PROXY_BRIDGE_URL } from './config'
 
-const BASE_URL = '' // Use relative paths for Vite proxy
+const BASE_URL = PROXY_BRIDGE_URL // Direct backend access to avoid Vite proxy fallbacks
 
 async function fetchProxy<T>(
   endpoint: string,
@@ -325,7 +326,7 @@ export async function deletePreset(id: string): Promise<boolean | null> {
 
 // Observability
 export async function fetchObservabilityHealth(): Promise<HealthStatus | null> {
-  return fetchProxy('/observability/health')
+  return fetchProxy('/api/observability/health')
 }
 
 export async function fetchObservabilityAnalytics(tool?: string): Promise<ToolMetrics[] | null> {
@@ -440,7 +441,7 @@ export async function createSSEConnection(channel: string): Promise<SSEChannel |
 
 // MCP
 export async function listMCPTools(): Promise<{ tools: Tool[] } | null> {
-  return fetchProxy('/mcp/tools')
+  return fetchProxy('/api/mcp/tools')
 }
 
 export async function callMCPTool(name: string, args: Record<string, unknown>): Promise<{ result: unknown; duration_ms: number; success: boolean } | null> {
@@ -452,7 +453,7 @@ export async function callMCPTool(name: string, args: Record<string, unknown>): 
 
 // Tools
 export async function fetchTools(): Promise<Tool[] | null> {
-  const data = await fetchProxy<{ tools: Tool[] }>('/tools')
+  const data = await fetchProxy<{ tools: Tool[] }>('/api/tools/list')
   return data?.tools ?? null
 }
 
@@ -479,7 +480,7 @@ export async function fetchUrl(url: string): Promise<{ content: string } | null>
 
 // Protocols - MCP & A2A
 export async function fetchMCPServers(): Promise<MCPServer[] | null> {
-  const data = await fetchProxy<{ servers: MCPServer[] }>('/mcp/servers')
+  const data = await fetchProxy<{ servers: MCPServer[] }>('/api/mcp/servers')
   return data?.servers ?? null
 }
 
@@ -699,6 +700,24 @@ export async function orchestrate(
       tools_available: toolsAvailable,
       agents_available: agentsAvailable,
       orchestration_mode: orchestrationMode,
+    }),
+  })
+}
+
+export async function previewTrigger(
+  message: string,
+  overrides?: {
+    orchestration_mode?: string
+    context_strategy?: string
+    max_steps?: number
+    tool_budget?: number
+  }
+): Promise<{ trigger_profile: any; resolved: any } | null> {
+  return fetchProxy('/v1/agent/trigger-preview', {
+    method: 'POST',
+    body: JSON.stringify({
+      message,
+      ...overrides,
     }),
   })
 }

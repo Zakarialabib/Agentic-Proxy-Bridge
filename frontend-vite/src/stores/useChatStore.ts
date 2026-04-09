@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { PROXY_BRIDGE_URL } from '@/lib/config'
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
@@ -10,6 +11,7 @@ interface ChatMessage {
 
 interface ChatState {
   messages: ChatMessage[]
+  draftMessage: string
   selectedModel: string | null
   isLoading: boolean
   temperature: number
@@ -19,19 +21,22 @@ interface ChatState {
   maxTokens: number
   contextWindow: number
   thinkingMode: boolean
+  contextStrategy: 'full' | 'prune' | 'summarize'
   systemPrompt: string
 
   setModel: (modelId: string | null) => void
   setMessages: (messages: ChatMessage[]) => void
   addMessage: (message: ChatMessage) => void
-  sendStreamingMessage: (content: string) => Promise<void>
-  setParams: (params: Partial<Pick<ChatState, 'temperature' | 'topP' | 'minP' | 'repeatPenalty' | 'maxTokens' | 'contextWindow' | 'thinkingMode' | 'systemPrompt'>>) => void
+  sendStreamingMessage: (content: string, options?: { stream?: boolean }) => Promise<void>
+  setDraftMessage: (message: string) => void
+  setParams: (params: Partial<Pick<ChatState, 'temperature' | 'topP' | 'minP' | 'repeatPenalty' | 'maxTokens' | 'contextWindow' | 'thinkingMode' | 'contextStrategy' | 'systemPrompt'>>) => void
   clearMessages: () => void
   setLoading: (loading: boolean) => void
 }
 
 export const useChatStore = create<ChatState>()((set, get) => ({
   messages: [],
+  draftMessage: '',
   selectedModel: null,
   isLoading: false,
   temperature: 0.7,
@@ -41,6 +46,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   maxTokens: 2048,
   contextWindow: 4096,
   thinkingMode: false,
+  contextStrategy: 'full',
   systemPrompt: '',
 
   setModel: (modelId) => set({ selectedModel: modelId }),
@@ -49,9 +55,24 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
 
-  sendStreamingMessage: async (content: string) => {
+  setDraftMessage: (message) => set({ draftMessage: message }),
+
+  sendStreamingMessage: async (content: string, options?: { stream?: boolean }) => {
     const { selectedModel, temperature, topP, minP, repeatPenalty, maxTokens, contextWindow, thinkingMode, systemPrompt } = get()
     if (!content.trim()) return
+    if (!selectedModel) {
+      set((state) => ({
+        messages: [
+          ...state.messages,
+          {
+            role: 'assistant',
+            content: 'Please select a model before sending a message.',
+            timestamp: Date.now(),
+          },
+        ],
+      }))
+      return
+    }
 
     const userMessage: ChatMessage = {
       role: 'user',
@@ -73,13 +94,14 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         messages.unshift({ role: 'system', content: systemPrompt.trim() })
       }
 
-      const response = await fetch('/v1/chat/completions', {
+      const stream = options?.stream ?? true
+      const response = await fetch(`${PROXY_BRIDGE_URL}/v1/agent/orchestrate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: selectedModel,
           messages,
-          stream: true,
+          stream,
           temperature,
           top_p: topP,
           min_p: minP,
@@ -87,11 +109,35 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           max_tokens: maxTokens,
           contextWindow,
           thinking: thinkingMode,
+          context_strategy: get().contextStrategy,
         }),
       })
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      if (!stream) {
+        const data = await response.json()
+        const payload = data?.chat_completion ?? data
+        const content =
+          payload?.choices?.[0]?.message?.content ??
+          payload?.choices?.[0]?.delta?.content ??
+          payload?.output?.[0]?.content ??
+          'No response'
+        set((state) => ({
+          messages: [
+            ...state.messages,
+            {
+              role: 'assistant',
+              content,
+              timestamp: Date.now(),
+              modelUsed: selectedModel || undefined,
+            },
+          ],
+          isLoading: false,
+        }))
+        return
       }
 
       const reader = response.body?.getReader()
@@ -170,7 +216,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   setParams: (params) => set(params),
 
-  clearMessages: () => set({ messages: [] }),
+  clearMessages: () => set({ messages: [], draftMessage: '' }),
 
   setLoading: (loading) => set({ isLoading: loading }),
 }))

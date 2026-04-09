@@ -1,4 +1,7 @@
-const BASE_URL = ''; // Proxy via vite
+import { PROXY_BRIDGE_URL } from './config'
+
+const BASE_URL = PROXY_BRIDGE_URL // Connect directly to Proxy Bridge
+
 
 export async function fetchObservabilityDashboard() {
   const res = await fetch(`${BASE_URL}/api/observability/dashboard`);

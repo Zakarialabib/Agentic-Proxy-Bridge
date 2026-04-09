@@ -1,7 +1,17 @@
 from fastapi import APIRouter
 from typing import List, Dict, Any
 
-router = APIRouter(prefix="/api/mcp", tags=["MCP"])
+router = APIRouter(tags=["MCP"])
+
+@router.get("/status")
+async def get_mcp_status():
+    return {
+        "status": "ready",
+        "active_servers": 0,
+        "total_tools": 0,
+        "last_sync": 0.0
+    }
+
 
 
 @router.get("/servers")

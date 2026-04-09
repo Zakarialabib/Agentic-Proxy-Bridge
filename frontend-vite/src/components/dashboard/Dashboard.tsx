@@ -1,8 +1,10 @@
 // Dashboard Components - Status & Metrics Display
 
-import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import * as api from '@/lib/api'
 import { MetricsDisplay } from '@/components/inference/MetricsDisplay'
+import { gatePolling, getPollingPolicy } from '@/lib/polling-policies'
+import { useSettingsStore } from '@/stores/useSettingsStore'
 import type { ProxyStatus, PerformanceMetrics, CacheStats } from '@/lib/types'
 
 import { ConnectionMatrix } from './ConnectionMatrix'
@@ -11,32 +13,35 @@ import { VRAMDisplay } from './VRAMDisplay'
 
 // Main Dashboard Component
 export function Dashboard() {
-  const [status, setStatus] = useState<ProxyStatus | null>(null)
-  const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null)
-  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null)
-  const [uptime, setUptime] = useState(0)
-  
-  useEffect(() => {
-    const loadData = async () => {
-      const [statusData, metricsData, cacheData] = await Promise.all([
-        api.fetchStatus(),
-        api.fetchPerformanceMetrics(),
-        api.fetchCacheStats(),
-      ])
-      setStatus(statusData)
-      setMetrics(metricsData)
-      setCacheStats(cacheData)
-    }
-    
-    loadData()
-    
-    const interval = setInterval(() => {
-      loadData()
-      setUptime(prev => prev + 1)
-    }, 3000)
-    
-    return () => clearInterval(interval)
-  }, [])
+  const { pollingEnabled, activeTab } = useSettingsStore()
+  const isActive = activeTab === 'dashboard'
+  const statusPolicy = gatePolling(getPollingPolicy('systemStatus'), pollingEnabled, isActive)
+  const metricsPolicy = gatePolling(getPollingPolicy('observability'), pollingEnabled, isActive)
+
+  const statusQuery = useQuery<ProxyStatus | null>({
+    queryKey: ['system-status'],
+    queryFn: api.fetchStatus,
+    enabled: isActive,
+    ...statusPolicy,
+  })
+
+  const metricsQuery = useQuery<PerformanceMetrics | null>({
+    queryKey: ['performance-metrics'],
+    queryFn: api.fetchPerformanceMetrics,
+    enabled: isActive,
+    ...metricsPolicy,
+  })
+
+  const cacheStatsQuery = useQuery<CacheStats | null>({
+    queryKey: ['cache-stats'],
+    queryFn: api.fetchCacheStats,
+    enabled: isActive,
+    ...metricsPolicy,
+  })
+
+  const status = statusQuery.data ?? null
+  const metrics = metricsQuery.data ?? null
+  const cacheStats = cacheStatsQuery.data ?? null
   
   return (
     <div className="space-y-4">

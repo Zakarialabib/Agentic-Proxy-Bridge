@@ -22,6 +22,8 @@ import {
   Bot,
 } from 'lucide-react'
 import { ModelSelector } from './model-selector'
+import type { ModelInfo } from '@/lib/types'
+import type { LoadedModelInstance } from '@/hooks/use-models'
 
 const PROXY_PORT = 3001
 
@@ -54,6 +56,12 @@ export interface ChatInterfaceProps {
   showModelSelector: boolean
   modelPresets: ModelPreset[]
   selectedModelPreset: string
+  availableModels: ModelInfo[]
+  loadedModels: LoadedModelInstance[]
+  onLoadModel: (modelId: string) => Promise<void> | void
+  onUnloadModel: (modelId: string) => Promise<void> | void
+  loadingModel: string | null
+  modelError?: string | null
   showAdvancedSettings: boolean
   chatTemperature: number
   chatMaxTokens: number
@@ -85,6 +93,12 @@ export function ChatInterface({
   modelPresets,
   selectedModelPreset,
   showAdvancedSettings,
+  availableModels,
+  loadedModels,
+  onLoadModel,
+  onUnloadModel,
+  loadingModel,
+  modelError,
   chatTemperature,
   chatMaxTokens,
   chatContextLength,
@@ -168,6 +182,12 @@ export function ChatInterface({
               <div className="mb-3 p-3 rounded-lg bg-slate-900/50 border border-slate-700">
                 <ModelSelector 
                   selectedModel={currentModel}
+                  availableModels={availableModels}
+                  loadedModels={loadedModels}
+                  onLoadModel={onLoadModel}
+                  onUnloadModel={onUnloadModel}
+                  loadingModel={loadingModel}
+                  error={modelError}
                   onModelLoaded={(modelId) => {
                     onSetModel(modelId)
                     onSetShowModelSelector(false)
@@ -331,7 +351,7 @@ export function ChatInterface({
           <CardContent>
             <div className="space-y-2 text-xs font-mono bg-slate-900/50 p-3 rounded-lg">
               <p className="text-slate-500"># Chat Completions</p>
-              <p className="text-cyan-400">POST /v1/chat/completions</p>
+              <p className="text-cyan-400">POST /v1/agent/orchestrate</p>
               <p className="text-slate-500 mt-2"># Orchestrate</p>
               <p className="text-purple-400">POST /v1/agent/orchestrate</p>
               <p className="text-slate-500 mt-2"># Knowledge Query</p>

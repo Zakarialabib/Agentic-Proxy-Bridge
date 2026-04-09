@@ -4,6 +4,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ChevronDown, ChevronUp, Sparkles, User, Terminal, Activity, RotateCcw, BrainCircuit, Minimize2 } from "lucide-react"
 import { useState } from "react"
 import { ToolArtifact } from "./ToolArtifact"
+import ReactMarkdown from "react-markdown"
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism"
 
 interface MessageBubbleProps {
   role: 'user' | 'assistant' | 'system'
@@ -14,7 +17,7 @@ interface MessageBubbleProps {
 }
 
 export function MessageBubble({ role, content, modelUsed, isLast, telemetry }: MessageBubbleProps) {
-  const [isReasoningOpen, setIsReasoningOpen] = useState(true)
+  const [isReasoningOpen, setIsReasoningOpen] = useState(false)
 
   // Parse reasoning/thought tags
   const parseContent = (text: string) => {
@@ -33,6 +36,72 @@ export function MessageBubble({ role, content, modelUsed, isLast, telemetry }: M
   }
 
   const { thought, mainContent } = parseContent(content);
+
+  const renderMarkdown = (text: string) => (
+    <ReactMarkdown
+      components={{
+        code({ inline, className, children, ...props }: any) {
+          const match = /language-(\w+)/.exec(className || '')
+          if (inline) {
+            return (
+              <code className="px-1 py-0.5 rounded bg-slate-900/60 text-cyan-200 text-[12px]" {...props}>
+                {children}
+              </code>
+            )
+          }
+          return (
+            <div className="my-2 overflow-x-auto rounded-lg border border-slate-700/60 bg-slate-900/70">
+              <SyntaxHighlighter
+                language={match?.[1] || 'text'}
+                style={oneDark}
+                customStyle={{ margin: 0, background: 'transparent', fontSize: '12px' }}
+                {...props}
+              >
+                {String(children).replace(/\n$/, '')}
+              </SyntaxHighlighter>
+            </div>
+          )
+        },
+        p({ children, ...props }) {
+          return (
+            <p className="leading-relaxed break-words" {...props}>
+              {children}
+            </p>
+          )
+        },
+        ul({ children, ...props }) {
+          return (
+            <ul className="list-disc pl-5 space-y-1" {...props}>
+              {children}
+            </ul>
+          )
+        },
+        ol({ children, ...props }) {
+          return (
+            <ol className="list-decimal pl-5 space-y-1" {...props}>
+              {children}
+            </ol>
+          )
+        },
+        a({ children, ...props }) {
+          return (
+            <a className="text-cyan-400 underline underline-offset-2" {...props}>
+              {children}
+            </a>
+          )
+        },
+        blockquote({ children, ...props }) {
+          return (
+            <blockquote className="border-l-2 border-slate-600 pl-3 text-slate-300 italic" {...props}>
+              {children}
+            </blockquote>
+          )
+        },
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  )
 
   const renderToolBlocks = (text: string) => {
     const parts = text.split(/(<tool_call>[\s\S]*?<\/tool_call>|<tool_response>[\s\S]*?<\/tool_response>)/g);
@@ -59,7 +128,7 @@ export function MessageBubble({ role, content, modelUsed, isLast, telemetry }: M
         return <ToolArtifact key={index} toolName={toolName} toolContent={actualContent} isCall={false} />
       }
       
-      return part.trim() ? <div key={index} className="whitespace-pre-wrap leading-relaxed">{part}</div> : null;
+      return part.trim() ? <div key={index} className="prose prose-invert max-w-none text-slate-200">{renderMarkdown(part)}</div> : null;
     });
   }
 

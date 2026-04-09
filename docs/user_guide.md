@@ -66,6 +66,15 @@ Open http://localhost:5173
    - **Top P**: Nucleus sampling threshold
 3. Send a message to see the effect
 
+### Trigger Preview (Agentic Mode)
+1. Open **Trigger Preview** in the side panel
+2. Paste a prompt
+3. Click **Preview Trigger**
+4. Review:
+   - Triggered intent tags
+   - Recommended orchestration actions
+   - Final resolved settings
+
 ### Model Management
 1. Open the **Models** sidebar
 2. Click a model to select it

@@ -5,6 +5,16 @@ from app.services.coalescer import embedding_coalescer
 
 router = APIRouter(prefix="/v1", tags=["Embeddings"])
 
+@router.get("/knowledge/status")
+async def get_knowledge_status():
+    return {
+        "indexed_documents": 0,
+        "embedding_model": "text-embedding-3-small",
+        "last_index_time": 0.0,
+        "status": "idle"
+    }
+
+
 @router.post("/embeddings")
 async def create_embedding(request: EmbeddingRequest):
     try:

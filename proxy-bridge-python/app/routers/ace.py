@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from typing import List, Dict, Any
 
-router = APIRouter(prefix="/api/ace", tags=["ACE"])
+router = APIRouter(tags=["ACE"])
 
 
 @router.get("/agents")

@@ -545,10 +545,50 @@ Advanced agentic pipeline orchestrator.
 **Request**:
 ```json
 {
-  "prompt": "Analyze this codebase",
-  "scenario": "code_analyst",
-  "tools": ["file_list", "file_read"],
-  "max_iterations": 5
+  "model": "qwen3.5-4b",
+  "messages": [{"role": "user", "content": "Analyze this codebase"}],
+  "stream": true,
+  "orchestration_mode": "adaptive",
+  "context_strategy": "prune",
+  "max_steps": 8,
+  "tool_budget": 4
+}
+```
+
+**Notes**:
+- If `context_strategy`, `max_steps`, or `tool_budget` are omitted, the proxy may apply trigger-based defaults.
+- Streaming responses remain OpenAI-compatible; telemetry events include `trigger_profile` and trace details.
+
+### POST /v1/agent/trigger-preview
+
+Preview trigger matching and orchestration treatment without executing a model call.
+
+**Request**:
+```json
+{
+  "message": "Refactor src/app.tsx and update tests"
+}
+```
+
+**Response** `200 OK`:
+```json
+{
+  "trigger_profile": {
+    "triggered": true,
+    "intent": ["code_edit", "multi_step"],
+    "recommended_actions": {
+      "orchestration_mode": "adaptive",
+      "context_strategy": "prune",
+      "max_steps": 8,
+      "tool_budget": 4
+    }
+  },
+  "resolved": {
+    "orchestration_mode": "adaptive",
+    "context_strategy": "prune",
+    "max_steps": 8,
+    "tool_budget": 4
+  }
 }
 ```
 

@@ -33,7 +33,11 @@ class JsonGuardrail:
             
             # NeMo requirement: Presence of 'name'
             if "name" not in data:
-                return False, None, "Missing mandatory field 'name' in tool call."
+                fence_match = re.search(r"```([a-zA-Z0-9_.-]+)", content)
+                if fence_match:
+                    data["name"] = fence_match.group(1)
+                else:
+                    return False, None, "Missing mandatory field 'name' in tool call."
             
             # Arguments can be optional or empty, but should be a dict if present
             args = data.get("arguments") or data.get("parameters")

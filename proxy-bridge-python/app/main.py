@@ -53,15 +53,29 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS: allow localhost + optional extra origins from env for LAN dev
+_cors_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+]
+try:
+    import os
+    extra = os.getenv("CORS_ORIGINS", "")
+    if extra:
+        _cors_origins.extend([o.strip() for o in extra.split(",") if o.strip()])
+except Exception:
+    pass
+
+allow_credentials = True
+if "*" in _cors_origins:
+    allow_credentials = False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -75,15 +89,15 @@ app.include_router(embeddings.router)
 app.include_router(agent.router)
 app.include_router(worklog.router)
 app.include_router(hardware_router)
-app.include_router(retrieve.router)
+app.include_router(retrieve.router, prefix="/api/retrieve", tags=["Retrieval"])
 app.include_router(presets.router)
 app.include_router(observability.router, prefix="/api/observability", tags=["Observability"])
 app.include_router(completions.router, tags=["Completions"])
 app.include_router(context_router)
-app.include_router(tools_router)
-app.include_router(mcp_router)
+app.include_router(tools_router, prefix="/api/tools", tags=["Tools"])
+app.include_router(mcp_router, prefix="/api/mcp", tags=["MCP"])
 app.include_router(settings_router.router)
-app.include_router(ace_router)
+app.include_router(ace_router, prefix="/api/ace", tags=["ACE"])
 
 
 @app.get("/health")
@@ -145,6 +159,15 @@ async def frontend_status():
             "streaming": True,
             "rag": False
         }
+    }
+
+@app.get("/api/embeddings/knowledge/status")
+async def get_ui_knowledge_status():
+    return {
+        "indexed_documents": 0,
+        "embedding_model": "text-embedding-3-small",
+        "last_index_time": 0.0,
+        "status": "idle"
     }
 
 @app.get("/dashboard")

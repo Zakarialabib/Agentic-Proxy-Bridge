@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from app.services.context_manager import context_manager, Message
 
-router = APIRouter(prefix="/api/context", tags=["Context"])
+router = APIRouter(tags=["Context"])
 
 
 class CreateSessionRequest(BaseModel):

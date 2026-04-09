@@ -1,6 +1,6 @@
 
 
-import { Server, Settings, Wifi, WifiOff } from 'lucide-react'
+import { Server, Settings, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { ProxyStatus } from '@/lib/types'
@@ -10,6 +10,7 @@ interface HeaderProps {
   status: ProxyStatus | null
   uptime: number
   onSettingsClick: () => void
+  onRefresh: () => void
 }
 
 function StatusPill({ status, label, pulse = false }: { status: 'connected' | 'degraded' | 'disconnected', label: string, pulse?: boolean }) {
@@ -40,7 +41,7 @@ const formatUptime = (seconds: number) => {
   return `${mins}m`
 }
 
-export function Header({ status, uptime, onSettingsClick }: HeaderProps) {
+export function Header({ status, uptime, onSettingsClick, onRefresh }: HeaderProps) {
   return (
     <header className="border-b border-slate-700/50 bg-slate-900/80 backdrop-blur-xl sticky top-0 z-50">
       <div className="container mx-auto px-4 py-3">
@@ -83,6 +84,14 @@ export function Header({ status, uptime, onSettingsClick }: HeaderProps) {
             <Badge variant="outline" className="text-cyan-400 border-cyan-500/30 bg-cyan-500/5">
               :{PROXY_PORT}
             </Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-slate-400 hover:text-white"
+              onClick={onRefresh}
+            >
+              <RefreshCw className="w-5 h-5" />
+            </Button>
             <Button 
               variant="ghost" 
               size="icon" 

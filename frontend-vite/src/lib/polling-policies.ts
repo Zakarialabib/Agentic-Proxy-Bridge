@@ -5,7 +5,7 @@
 
 export interface PollingPolicy {
   staleTime: number // How long data is considered fresh (ms)
-  refetchInterval?: number // Background refetch interval (ms)
+  refetchInterval?: number | false // Background refetch interval (ms)
   refetchOnWindowFocus?: boolean // Refetch when window regains focus
   refetchOnReconnect?: boolean // Refetch when network reconnects
 }
@@ -67,6 +67,28 @@ export type PollingPolicyKey = keyof typeof POLLING_POLICIES
  */
 export function getPollingPolicy(key: PollingPolicyKey): PollingPolicy {
   return POLLING_POLICIES[key]
+}
+
+export function applyPollingPolicy(policy: PollingPolicy, pollingEnabled: boolean): PollingPolicy {
+  if (pollingEnabled) return policy
+  return {
+    ...policy,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  }
+}
+
+export function gatePolling(policy: PollingPolicy, pollingEnabled: boolean, isActive: boolean): PollingPolicy {
+  if (!pollingEnabled || !isActive) {
+    return {
+      ...policy,
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    }
+  }
+  return policy
 }
 
 /**

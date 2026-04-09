@@ -6,8 +6,139 @@ from app.services.pool import connection_pool, ACTIVE_CONNECTIONS
 from app.services.tool_service import tool_registry
 from app.guardrails.validator import validator
 from app.core.settings import settings
+from app.services.context_strategy import apply_context_strategy
 
 MAX_REACT_STEPS = 10
+
+ORCHESTRATION_PROFILES: Dict[str, Dict[str, Any]] = {
+    "adaptive": {
+        "system_prompt": (
+            "[COGNITIVE MODE: ADAPTIVE]\n"
+            "Choose the smallest sufficient path: local tools first when they solve the task, "
+            "MCP tools for bridge-capable operations, and agent handoffs only when the task needs delegation. "
+            "Keep reasoning concise and only call tools that materially move the task forward."
+        ),
+        "tool_priority": ("local", "mcp", "a2a"),
+        "max_steps": 10,
+    },
+    "mcp_only": {
+        "system_prompt": (
+            "[COGNITIVE MODE: MCP]\n"
+            "Use MCP and bridge-native tools only. Prefer direct tool execution over delegation. "
+            "Do not hand off to other agents unless no MCP tool can satisfy the request."
+        ),
+        "tool_priority": ("mcp", "local", "a2a"),
+        "max_steps": 8,
+    },
+    "a2a_only": {
+        "system_prompt": (
+            "[COGNITIVE MODE: A2A]\n"
+            "Prefer agent-to-agent delegation and coordination. "
+            "Avoid local or MCP tools unless they are required to prepare a handoff."
+        ),
+        "tool_priority": ("a2a", "mcp", "local"),
+        "max_steps": 8,
+    },
+    "local_only": {
+        "system_prompt": (
+            "[COGNITIVE MODE: LOCAL]\n"
+            "Use local reasoning and local deterministic tools only. "
+            "Do not delegate to other agents or use external bridge tools."
+        ),
+        "tool_priority": ("local",),
+        "max_steps": 6,
+    },
+}
+
+
+def _normalize_message(message: Any) -> Dict[str, Any]:
+    if isinstance(message, dict):
+        return message
+    if hasattr(message, "model_dump"):
+        return message.model_dump()
+    return {
+        "role": getattr(message, "role", "user"),
+        "content": getattr(message, "content", ""),
+    }
+
+
+def _content_to_text(content: Any) -> str:
+    if isinstance(content, list):
+        parts: List[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                if item.get("type") == "text":
+                    parts.append(str(item.get("text", "")))
+                else:
+                    parts.append(str(item.get("text") or item.get("content") or ""))
+            else:
+                parts.append(str(item))
+        return " ".join(part for part in parts if part).strip()
+    if isinstance(content, dict):
+        return json.dumps(content, ensure_ascii=False)
+    return str(content or "")
+
+
+def _telemetry_bytes(event: str, details: str) -> bytes:
+    payload = {"type": "telemetry", "event": event, "details": details}
+    return f"data: {json.dumps(payload)}\n\n".encode("utf-8")
+
+def _looks_like_tool_block(content: str) -> bool:
+    if not content:
+        return False
+    if "<tool_call>" in content:
+        return True
+    if "```" in content and ("\"name\"" in content or "\"arguments\"" in content or "{" in content):
+        return True
+    return False
+
+
+def _classify_tool(tool: Dict[str, Any]) -> str:
+    function = tool.get("function", tool)
+    name = str(function.get("name", "")).lower()
+    if any(token in name for token in ("agent", "a2a", "handoff", "delegate", "orchestrate")):
+        return "a2a"
+    if any(token in name for token in ("mcp", "web_search", "knowledge", "file_", "read_file", "write_file", "calculate", "get_current_time", "search")):
+        return "mcp"
+    return "local"
+
+
+def build_orchestration_profile(mode: Optional[str]) -> Dict[str, Any]:
+    normalized = (mode or "adaptive").strip().lower()
+    return ORCHESTRATION_PROFILES.get(normalized, ORCHESTRATION_PROFILES["adaptive"]) | {"mode": normalized}
+
+
+def prioritize_tools_for_mode(tools: List[Dict[str, Any]], mode: Optional[str]) -> List[Dict[str, Any]]:
+    if not tools:
+        return tools
+
+    profile = build_orchestration_profile(mode)
+    priority = profile.get("tool_priority", ("local", "mcp", "a2a"))
+    ordered: List[Dict[str, Any]] = []
+    remaining = tools[:]
+
+    for category in priority:
+        matched = [tool for tool in remaining if _classify_tool(tool) == category]
+        ordered.extend(matched)
+        remaining = [tool for tool in remaining if tool not in matched]
+
+    ordered.extend(remaining)
+
+    if profile["mode"] == "local_only":
+        # Keep only local tools when the caller explicitly wants an offline path.
+        return [tool for tool in ordered if _classify_tool(tool) == "local"]
+
+    return ordered
+
+
+def build_orchestration_system_prompt(mode: Optional[str]) -> str:
+    profile = build_orchestration_profile(mode)
+    tool_format = (
+        "Tool calls should use: <tool_call>{\"name\": \"tool_name\", \"arguments\": { ... }}</tool_call>. "
+        "If a client enforces code blocks, use: ```tool_name\\n{\"arguments\": { ... }}\\n```. "
+        "Do not invent file paths. If a path is unknown, call file_list first or ask the user."
+    )
+    return f"{profile['system_prompt']}\n{tool_format}"
 
 async def _compress_tool_result(result_str: str, tool_name: str, model_id: str) -> str:
     """Active Compression Mode to summarize large tool results and prevent Amnesia."""
@@ -50,30 +181,59 @@ async def _compress_tool_result(result_str: str, tool_name: str, model_id: str) 
 async def intercept_and_execute_tools(
     initial_response: httpx.Response,
     original_payload: Dict[str, Any],
-    messages: List[Dict[str, Any]]
+    messages: List[Dict[str, Any]],
+    orchestration_mode: Optional[str] = None
 ) -> AsyncGenerator[bytes, None]:
     """
     Advanced agentic interceptor that handles <tool_call> tags in real-time.
     Recursively executes tools and re-prompts the LLM.
     """
     current_response = initial_response
-    current_messages = list(messages)
+    current_messages = [_normalize_message(message) for message in messages]
     recursive_hops = 0
+    profile = build_orchestration_profile(orchestration_mode)
+    profile_max_steps = int(profile.get("max_steps") or MAX_REACT_STEPS)
+
+    try:
+        requested_max_steps = original_payload.get("max_steps")
+        max_react_steps = int(requested_max_steps) if requested_max_steps is not None else profile_max_steps
+    except (TypeError, ValueError):
+        max_react_steps = profile_max_steps
+    max_react_steps = max(1, min(max_react_steps, MAX_REACT_STEPS))
+
+    try:
+        requested_tool_budget = original_payload.get("tool_budget")
+        if requested_tool_budget is None:
+            tool_budget_remaining = max_react_steps
+        else:
+            tool_budget_remaining = max(0, int(requested_tool_budget))
+    except (TypeError, ValueError):
+        tool_budget_remaining = max_react_steps
+
+    force_json_mode = bool(
+        isinstance(original_payload.get("response_format"), dict)
+        and original_payload["response_format"].get("type") == "json_object"
+    )
 
     from app.services.context_manager import context_controller
 
-    while recursive_hops < MAX_REACT_STEPS:
+    while recursive_hops < max_react_steps:
         # --- Cognitive Mode Switch (Predictive Unloading) ---
         is_router_mode = (recursive_hops < 2)
         cognitive_mode = "router" if is_router_mode else "reasoning"
         
         # Before each hop, adjust context based on accumulated tool payload
         tool_results_size = sum(
-            len(msg.get("content", "")) 
-            for msg in current_messages 
-            if msg.get("role") == "user" and "<tool_response>" in msg.get("content", "")
+            len(_content_to_text(msg.get("content", "")))
+            for msg in current_messages
+            if msg.get("role") == "user" and "<tool_response>" in _content_to_text(msg.get("content", ""))
         )
-        await context_controller.adjust_for_trajectory(recursive_hops, tool_results_size, cognitive_mode)
+        await context_controller.adjust_for_trajectory(
+            recursive_hops,
+            tool_results_size,
+            cognitive_mode,
+            model_id=original_payload.get("model"),
+        )
         # ----------------------------------------------------
 
         recursive_hops += 1
@@ -113,7 +273,7 @@ async def intercept_and_execute_tools(
                             content = data["choices"][0]["delta"]["content"]
                             
                         if content:
-                            if "<tool_call>" in content or "<tool_call>" in tool_call_buffer:
+                            if _looks_like_tool_block(content) or _looks_like_tool_block(tool_call_buffer):
                                 is_tool_call_mode = True
                             
                             if is_tool_call_mode:
@@ -145,16 +305,24 @@ async def intercept_and_execute_tools(
                     print(f"[Agentic Bridge] Breadcrumb extracted: {len(breadcrumb)} chars saved from GPU context.")
                     
                     # Yield telemetry event
-                    telemetry = {"type": "telemetry", "event": "breadcrumb", "details": f"Extracted {len(breadcrumb)} chars of reasoning to save VRAM."}
-                    yield f"data: {json.dumps(telemetry)}\n\n".encode("utf-8")
+                    yield _telemetry_bytes("breadcrumb", f"Extracted {len(breadcrumb)} chars of reasoning to save VRAM.")
                 # ---------------------------------------------------
                 
+                if tool_budget_remaining <= 0:
+                    yield _telemetry_bytes(
+                        "budget_exhausted",
+                        f"Tool budget exhausted at hop {recursive_hops}; skipping tool execution."
+                    )
+                    break
+
                 if tool_data and isinstance(tool_data, dict) and tool_data.get("name"):
                     tool_name = tool_data["name"]
                     args = tool_data.get("arguments") or tool_data.get("parameters") or {}
+                    tool_call_content = re.sub(r"```[a-zA-Z0-9_-]*\n", "", tool_call_content).replace("```", "").strip()
                     
                     # Execution
                     call_result = await tool_registry.execute(tool_name, args)
+                    tool_budget_remaining = max(0, tool_budget_remaining - 1)
                     
                     if call_result.success:
                         result_str = str(call_result.result.get("content") if isinstance(call_result.result, dict) and "content" in call_result.result else call_result.result)
@@ -190,8 +358,7 @@ async def intercept_and_execute_tools(
                     # Do NOT append the hallucinated output or the error message to the context history.
                     # We treat the context like a database transaction and rollback to keep the KV cache pure.
                     print(f"[Agentic Bridge] Rollback Point triggered: Discarding invalid JSON to preserve KV cache. Error: {error_msg}")
-                    telemetry = {"type": "telemetry", "event": "rollback", "details": f"Tool error intercepted. Rolling back KV Cache to prevent pollution. ({error_msg})"}
-                    yield f"data: {json.dumps(telemetry)}\n\n".encode("utf-8")
+                    yield _telemetry_bytes("rollback", f"Tool error intercepted. Rolling back KV Cache to prevent pollution. ({error_msg})")
                     # ------------------------------------------------------
                     
                     # --- Breadcrumb Reinjection ---
@@ -213,18 +380,17 @@ async def intercept_and_execute_tools(
                 # Retry logic for both success (continue agent loop) and failure (fix JSON)
                 from app.services.context_builder import enforce_context_window
                 
-                # --- Semantic Context Pruning ---
-                try:
-                    from app.services.context_pruner import semantic_prune_context
-                    current_goal = messages[0].get("content", "") if messages else "Use tools correctly."
-                    current_messages = await semantic_prune_context(current_messages, current_goal, threshold=0.6)
-                except Exception as e:
-                    print(f"[Agentic Bridge] Semantic pruning skipped: {e}")
-                # --------------------------------
-
                 # Compress older context if approaching limits, preserving headroom for tools
                 max_tokens = original_payload.get("max_tokens") or 8192
+                current_goal = ""
+                for message in current_messages:
+                    if message.get("role") == "user":
+                        current_goal = str(message.get("content", ""))
+                        break
+                strategy = original_payload.get("context_strategy") or "full"
+                current_messages = await apply_context_strategy(current_messages, current_goal, strategy, max_tokens)
                 follow_up_payload = {**original_payload, "messages": enforce_context_window(current_messages, max_tokens)}
+                force_json_mode = force_json_mode or bool(original_payload.get("response_format"))
                 
                 if force_json_mode:
                     follow_up_payload["response_format"] = {"type": "json_object"}
@@ -279,15 +445,20 @@ async def intercept_and_execute_tools(
                         follow_up_payload["messages"][sys_msg_idx]["content"] = "[COGNITIVE MODE: ROUTER]\nPick exactly one tool to use next. Do not provide any explanations or <think> blocks. Output only the tool call.\n" + base_sys
                         follow_up_payload["max_tokens"] = min(follow_up_payload.get("max_tokens", 2048), 512)
                         print(f"[Agentic Bridge] Switching to ROUTER MODE (Hop {recursive_hops})")
-                        telemetry = {"type": "telemetry", "event": "mode_switch", "details": f"Hop {recursive_hops}: Switching to ROUTER MODE. Freezing deep layers to save VRAM."}
-                        yield f"data: {json.dumps(telemetry)}\n\n".encode("utf-8")
+                        yield _telemetry_bytes("mode_switch", f"Hop {recursive_hops}: Switching to ROUTER MODE. Freezing deep layers to save VRAM.")
                     else:
                         follow_up_payload["messages"][sys_msg_idx]["content"] = "[COGNITIVE MODE: REASONING]\nThink step-by-step using <think> blocks before acting. Evaluate the previous tool results carefully.\n" + base_sys
                         follow_up_payload["max_tokens"] = max(follow_up_payload.get("max_tokens", 2048), 2048)
                         print(f"[Agentic Bridge] Switching to REASONING MODE (Hop {recursive_hops})")
-                        telemetry = {"type": "telemetry", "event": "mode_switch", "details": f"Hop {recursive_hops}: Switching to REASONING MODE. Thawing deep layers for complex thought."}
-                        yield f"data: {json.dumps(telemetry)}\n\n".encode("utf-8")
+                        yield _telemetry_bytes("mode_switch", f"Hop {recursive_hops}: Switching to REASONING MODE. Thawing deep layers for complex thought.")
                 # -----------------------------
+
+                if tool_budget_remaining <= 0:
+                    yield _telemetry_bytes(
+                        "budget_exhausted",
+                        f"Tool budget exhausted at hop {recursive_hops}; stopping follow-up generation."
+                    )
+                    break
 
                 client = connection_pool.get_client("openai")
                 headers = {"Content-Type": "application/json"}
@@ -305,8 +476,9 @@ async def intercept_and_execute_tools(
             else:
                 # No more tools, we're done
                 break
-                
+
         except Exception as e:
             ACTIVE_CONNECTIONS.dec()
             yield f'data: {{"error": "{str(e)}"}}\n\n'.encode("utf-8")
             break
+

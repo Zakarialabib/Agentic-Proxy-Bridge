@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
+import { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useSystemStatusData } from '@/hooks/use-system-status'
+import { useModels } from '@/hooks/use-models'
+import { usePresets } from '@/hooks/use-presets'
 import { useObservability } from '@/hooks/use-observability'
 import { useToolsData } from '@/hooks/use-tools-data'
 import { useWorklogs } from '@/hooks/use-worklogs'
@@ -13,6 +16,7 @@ import { Header } from '@/components/layout/Header'
 import { Navigation } from '@/components/layout/Navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { PROXY_PORT } from '@/lib/types'
+import { PROXY_BRIDGE_URL } from '@/lib/config'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -64,11 +68,45 @@ const ToolsPanel = lazy(() => import('@/components/features/ToolsPanel').then(m 
 const ObservabilityPanel = lazy(() => import('@/components/features/ObservabilityPanel').then(m => ({ default: m.ObservabilityPanel })))
 const ChatPanel = lazy(() => import('@/components/features/ChatPanel').then(m => ({ default: m.ChatPanel })))
 
-const PROXY_BRIDGE_URL = ''
-
 export default function App() {
-  const { status, tools, availableModels, loadedModels, loadModel, unloadModel } = useSystemStatusData()
-  const { activeTab, setActiveTab, theme } = useSettingsStore()
+  const queryClient = useQueryClient()
+  const { status } = useSystemStatusData()
+  const {
+    availableModels,
+    loadedModels,
+    loadModel,
+    unloadModel,
+    refreshModels,
+    error: modelsError,
+  } = useModels()
+  const { presets, autotune } = usePresets()
+  const {
+    activeTab,
+    setActiveTab,
+    theme,
+    lmStudioHost,
+    lmStudioPort,
+    autoConnect,
+    streamingEnabled,
+    loggingEnabled,
+    logLevel,
+    cacheEmbeddings,
+    defaultReranker,
+    vramBudget,
+    autoEvict,
+    preWarmModels,
+    // Chat orchestration strategy lives in the chat store so all send paths share it.
+    setLmStudioConnection,
+    setAutoConnect,
+    setStreamingEnabled,
+    setLoggingEnabled,
+    setLogLevel,
+    setCacheEmbeddings,
+    setDefaultReranker,
+    setVramBudget,
+    setAutoEvict,
+    setPreWarmModels,
+  } = useSettingsStore()
   const chatStore = useChatStore()
   const { dashboard: obsDashboard, health: obsHealth } = useObservability()
   const { tools: agentTools } = useToolsData()
@@ -80,18 +118,11 @@ export default function App() {
   const [uptime, setUptime] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<'connection' | 'proxy' | 'retrieval' | 'vram' | 'export'>('connection')
-  const [lmStudioHost, setLmStudioHost] = useState('localhost')
-  const [lmStudioPort, setLmStudioPort] = useState(1234)
-  const [autoConnect, setAutoConnect] = useState(true)
-  const [streamingEnabled, setStreamingEnabled] = useState(true)
-  const [loggingEnabled, setLoggingEnabled] = useState(true)
-  const [logLevel, setLogLevel] = useState<'debug' | 'info' | 'warn' | 'error'>('info')
-  const [cacheEmbeddings, setCacheEmbeddings] = useState(true)
-  const [defaultReranker, setDefaultReranker] = useState<'fast' | 'deep' | 'cascade' | 'hybrid'>('cascade')
-  const [vramBudget, setVramBudget] = useState(8192)
-  const [autoEvict, setAutoEvict] = useState(true)
-  const [preWarmModels, setPreWarmModels] = useState(true)
   const [loadingModel, setLoadingModel] = useState<string | null>(null)
+  const [showModelSelector, setShowModelSelector] = useState(false)
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false)
+  const [activeScenario, setActiveScenario] = useState<string | null>(null)
+  const [selectedPresetId, setSelectedPresetId] = useState('')
 
   useEffect(() => {
     if (settingsOpen) loadSettings()
@@ -107,8 +138,7 @@ export default function App() {
       const res = await fetch(`${PROXY_BRIDGE_URL}/settings`)
       if (res.ok) {
         const data = await res.json()
-        setLmStudioHost(data.lm_studio?.host ?? 'localhost')
-        setLmStudioPort(data.lm_studio?.port ?? 1234)
+        setLmStudioConnection(data.lm_studio?.host ?? 'localhost', data.lm_studio?.port ?? 1234)
         setAutoConnect(data.lm_studio?.auto_connect ?? true)
         setStreamingEnabled(data.proxy?.streaming_enabled ?? true)
         setLoggingEnabled(data.proxy?.logging_enabled ?? true)
@@ -142,11 +172,15 @@ export default function App() {
   }, [lmStudioHost, lmStudioPort, autoConnect, streamingEnabled, loggingEnabled, logLevel, cacheEmbeddings, defaultReranker, vramBudget, autoEvict, preWarmModels])
 
   const models = availableModels ?? []
+  const loadedModelIds = useMemo(
+    () => new Set((loadedModels?.data ?? []).map((m) => m.instance_id)),
+    [loadedModels]
+  )
 
   const handleLoadModel = useCallback(async (modelId: string) => {
     setLoadingModel(modelId)
     try {
-      loadModel.mutate(modelId)
+      await loadModel.mutateAsync(modelId)
     } finally {
       setLoadingModel(null)
     }
@@ -155,7 +189,7 @@ export default function App() {
   const handleUnloadModel = useCallback(async (instanceId: string) => {
     setLoadingModel(instanceId)
     try {
-      unloadModel.mutate(instanceId)
+      await unloadModel.mutateAsync(instanceId)
     } finally {
       setLoadingModel(null)
     }
@@ -165,12 +199,172 @@ export default function App() {
     chatStore.setModel(modelId)
   }, [chatStore])
 
-  const handleSend = useCallback(() => {
-    const input = chatStore.messages[chatStore.messages.length - 1]?.role === 'user' ? '' : chatStore.messages[chatStore.messages.length - 1]?.content ?? ''
-    if (input.trim()) {
-      chatStore.sendStreamingMessage(input)
-    }
+  const resetScenario = useCallback(() => {
+    setActiveScenario(null)
+    chatStore.setParams({
+      temperature: 0.7,
+      topP: 0.9,
+      minP: 0.05,
+      repeatPenalty: 1.05,
+      maxTokens: 2048,
+      contextWindow: 4096,
+      thinkingMode: false,
+      contextStrategy: 'full',
+      systemPrompt: '',
+    })
   }, [chatStore])
+
+  const handleScenarioSelect = useCallback((scenario: string | null) => {
+    if (!scenario || scenario === activeScenario) {
+      resetScenario()
+      return
+    }
+    setActiveScenario(scenario)
+    if (scenario === 'code_assistant') {
+      chatStore.setParams({
+        temperature: 0.2,
+        topP: 0.9,
+        minP: 0.05,
+        repeatPenalty: 1.05,
+        maxTokens: 2048,
+        contextWindow: 8192,
+        thinkingMode: true,
+        contextStrategy: 'prune',
+        systemPrompt: 'You are a meticulous coding assistant. Provide concise, correct solutions and explain tradeoffs.',
+      })
+    } else if (scenario === 'deep_researcher') {
+      chatStore.setParams({
+        temperature: 0.4,
+        topP: 0.9,
+        minP: 0.05,
+        repeatPenalty: 1.05,
+        maxTokens: 4096,
+        contextWindow: 16384,
+        thinkingMode: true,
+        contextStrategy: 'summarize',
+        systemPrompt: 'You are a deep research agent. Ask clarifying questions and cite sources when available.',
+      })
+    } else if (scenario === 'data_analyst') {
+      chatStore.setParams({
+        temperature: 0.3,
+        topP: 0.8,
+        minP: 0.05,
+        repeatPenalty: 1.1,
+        maxTokens: 2048,
+        contextWindow: 8192,
+        thinkingMode: true,
+        contextStrategy: 'prune',
+        systemPrompt: 'You are a data analyst. Provide structured analysis, tables, and clear conclusions.',
+      })
+    } else if (scenario === 'quick_chat') {
+      chatStore.setParams({
+        temperature: 0.9,
+        topP: 0.95,
+        minP: 0.05,
+        repeatPenalty: 1.0,
+        maxTokens: 1024,
+        contextWindow: 4096,
+        thinkingMode: false,
+        contextStrategy: 'full',
+        systemPrompt: 'You are a fast, friendly chat assistant. Keep replies short and direct.',
+      })
+    }
+  }, [activeScenario, chatStore, resetScenario])
+
+  const handleSend = useCallback(async () => {
+    const input = chatStore.draftMessage
+    if (!input.trim()) return
+
+    const selectedModel = chatStore.selectedModel
+    if (!selectedModel) {
+      chatStore.addMessage({
+        role: 'assistant',
+        content: 'Please select a model before sending a message.',
+        timestamp: Date.now(),
+      })
+      return
+    }
+
+    if (!loadedModelIds.has(selectedModel)) {
+      setLoadingModel(selectedModel)
+      try {
+        await loadModel.mutateAsync(selectedModel)
+      } catch (error) {
+        chatStore.addMessage({
+          role: 'assistant',
+          content: `Error loading model: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          timestamp: Date.now(),
+        })
+        return
+      } finally {
+        setLoadingModel(null)
+      }
+    }
+
+    await chatStore.sendStreamingMessage(input, { stream: streamingEnabled })
+    chatStore.setDraftMessage('')
+  }, [chatStore, loadedModelIds, loadModel, streamingEnabled])
+
+  const handleRefreshActive = useCallback(() => {
+    const invalidate = (key: string) => queryClient.invalidateQueries({ queryKey: [key] })
+    switch (activeTab) {
+      case 'dashboard':
+        invalidate('system-status')
+        invalidate('models-available')
+        invalidate('models-loaded')
+        invalidate('performance-metrics')
+        invalidate('cache-stats')
+        invalidate('observability-dashboard')
+        invalidate('observability-health')
+        break
+      case 'worklog':
+        invalidate('worklogs')
+        break
+      case 'gateway':
+        invalidate('gateway')
+        break
+      case 'orchestrate':
+        invalidate('orchestrate')
+        invalidate('tools-list')
+        break
+      case 'knowledge':
+        invalidate('knowledge')
+        break
+      case 'protocols':
+        invalidate('protocols')
+        break
+      case 'tools':
+        invalidate('tools-list')
+        break
+      case 'observability':
+        invalidate('observability-dashboard')
+        invalidate('observability-health')
+        break
+      case 'chat':
+        invalidate('models-available')
+        invalidate('models-loaded')
+        invalidate('system-status')
+        break
+      default:
+        break
+    }
+  }, [activeTab, queryClient])
+
+  const handleApplyPreset = useCallback(() => {
+    const preset = presets.find((p) => p.id === selectedPresetId)
+    if (!preset) return
+    const params = preset.params || {}
+    chatStore.setParams({
+      temperature: (params.temperature as number) ?? chatStore.temperature,
+      topP: (params.top_p as number) ?? chatStore.topP,
+      minP: (params.min_p as number) ?? chatStore.minP,
+      repeatPenalty: (params.repeat_penalty as number) ?? chatStore.repeatPenalty,
+      maxTokens: (params.max_tokens as number) ?? chatStore.maxTokens,
+      contextWindow: (params.context_window as number) ?? chatStore.contextWindow,
+      contextStrategy: (params.context_strategy as 'full' | 'prune' | 'summarize') ?? chatStore.contextStrategy,
+      systemPrompt: preset.system_prompt ?? chatStore.systemPrompt,
+    })
+  }, [chatStore, presets, selectedPresetId])
 
   const renderPanel = () => {
     switch (activeTab) {
@@ -253,16 +447,24 @@ export default function App() {
           modelPresets={[]}
           selectedModelPreset=""
           status={status ?? null}
-          inputMessage=""
-          onInputChange={() => {}}
-          onSend={() => {}}
+          inputMessage={chatStore.draftMessage}
+          onInputChange={(value) => chatStore.setDraftMessage(value)}
+          onSend={handleSend}
           onModelSelect={handleModelSelect}
-          onPresetSelect={() => {}}
-          onRefreshModels={() => {}}
-          showModelSelector={false}
-          onShowModelSelector={() => {}}
-          showAdvancedSettings={false}
-          onShowAdvancedSettings={() => {}}
+          onModelPresetSelect={() => {}}
+          onRefreshModels={refreshModels}
+          showModelSelector={showModelSelector}
+          onShowModelSelector={setShowModelSelector}
+          availableModels={models}
+          loadedModels={loadedModels?.data ?? []}
+          onLoadModel={handleLoadModel}
+          onUnloadModel={handleUnloadModel}
+          loadingModel={loadingModel}
+          modelError={modelsError ? modelsError.message : null}
+          showAdvancedSettings={showAdvancedSettings}
+          onShowAdvancedSettings={setShowAdvancedSettings}
+          streamingEnabled={streamingEnabled}
+          onStreamingChange={setStreamingEnabled}
           chatTemperature={chatStore.temperature}
           chatTopP={chatStore.topP}
           chatMinP={chatStore.minP}
@@ -271,8 +473,17 @@ export default function App() {
           chatContextLength={chatStore.contextWindow}
           chatThinkingMode={chatStore.thinkingMode}
           systemPrompt={chatStore.systemPrompt}
-          activeScenario={null}
-          onScenarioSelect={() => {}}
+          activeScenario={activeScenario}
+          onScenarioSelect={handleScenarioSelect}
+          presets={presets}
+          selectedPresetId={selectedPresetId}
+          onAgentPresetSelect={setSelectedPresetId}
+          onApplyPreset={handleApplyPreset}
+          onAutotune={autotune.run}
+          autotuneRationales={autotune.rationales}
+          autotunePending={autotune.isPending}
+          reasoningEnabled={chatStore.thinkingMode}
+          contextStrategy={chatStore.contextStrategy}
           onTemperatureChange={(v) => chatStore.setParams({ temperature: v })}
           onTopPChange={(v) => chatStore.setParams({ topP: v })}
           onMinPChange={(v) => chatStore.setParams({ minP: v })}
@@ -280,6 +491,7 @@ export default function App() {
           onMaxTokensChange={(v) => chatStore.setParams({ maxTokens: v })}
           onContextLengthChange={(v) => chatStore.setParams({ contextWindow: v })}
           onThinkingModeChange={(v) => chatStore.setParams({ thinkingMode: v })}
+          onContextStrategyChange={(v) => chatStore.setParams({ contextStrategy: v })}
           onSystemPromptChange={(v) => chatStore.setParams({ systemPrompt: v })}
         /></ErrorBoundary>
       default:
@@ -289,7 +501,12 @@ export default function App() {
 
   return (
     <div className={`min-h-screen flex flex-col ${theme === 'dark' ? 'bg-[#0f172a]' : 'bg-gray-50'}`}>
-      <Header status={status ?? null} uptime={uptime} onSettingsClick={() => setSettingsOpen(true)} />
+      <Header
+        status={status ?? null}
+        uptime={uptime}
+        onSettingsClick={() => setSettingsOpen(true)}
+        onRefresh={handleRefreshActive}
+      />
       <Navigation activeTab={activeTab} onTabChange={setActiveTab} />
 
       <main className="flex-1 container mx-auto px-4 py-6">
@@ -353,11 +570,11 @@ export default function App() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-slate-300">LM Studio Host</Label>
-                  <Input value={lmStudioHost} onChange={(e) => setLmStudioHost(e.target.value)} className="mt-1.5 bg-slate-800 border-slate-600 text-white" />
+                  <Input value={lmStudioHost} onChange={(e) => setLmStudioConnection(e.target.value, lmStudioPort)} className="mt-1.5 bg-slate-800 border-slate-600 text-white" />
                 </div>
                 <div>
                   <Label className="text-slate-300">Port</Label>
-                  <Input type="number" value={lmStudioPort} onChange={(e) => setLmStudioPort(parseInt(e.target.value) || 1234)} className="mt-1.5 bg-slate-800 border-slate-600 text-white" />
+                  <Input type="number" value={lmStudioPort} onChange={(e) => setLmStudioConnection(lmStudioHost, parseInt(e.target.value) || 1234)} className="mt-1.5 bg-slate-800 border-slate-600 text-white" />
                 </div>
               </div>
               <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
@@ -539,8 +756,7 @@ export default function App() {
                       const text = await file.text()
                       const data = JSON.parse(text)
                       if (data.settings) {
-                        setLmStudioHost(data.settings.lmStudioHost ?? 'localhost')
-                        setLmStudioPort(data.settings.lmStudioPort ?? 1234)
+                        setLmStudioConnection(data.settings.lmStudioHost ?? 'localhost', data.settings.lmStudioPort ?? 1234)
                         setAutoConnect(data.settings.autoConnect ?? true)
                         setStreamingEnabled(data.settings.streamingEnabled ?? true)
                         setLoggingEnabled(data.settings.loggingEnabled ?? true)
@@ -564,8 +780,7 @@ export default function App() {
                     <p className="font-medium">Reset to Defaults</p>
                     <p className="mt-1">This will reset all settings to their default values.</p>
                     <Button size="sm" variant="destructive" className="mt-2" onClick={() => {
-                      setLmStudioHost('localhost')
-                      setLmStudioPort(1234)
+                      setLmStudioConnection('localhost', 1234)
                       setAutoConnect(true)
                       setStreamingEnabled(true)
                       setLoggingEnabled(true)
@@ -603,6 +818,9 @@ export default function App() {
             <div className="flex items-center gap-4">
               <Badge variant="outline" className="text-cyan-400 border-cyan-500/30 bg-cyan-500/5">:{PROXY_PORT}</Badge>
               <span>LMStudio Proxy Bridge</span>
+              <span className="text-slate-500">
+                Proxy: {PROXY_BRIDGE_URL ? PROXY_BRIDGE_URL : 'relative'}
+              </span>
             </div>
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1"><Brain className="w-3 h-3 text-purple-400" /> Knowledge Graph</span>

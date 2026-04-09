@@ -10,7 +10,7 @@ async def get_embeddings(texts: List[str]) -> List[List[float]]:
                 f"{settings.lm_studio_base_url}/v1/embeddings",
                 json={
                     "input": texts,
-                    "model": "text-embedding-qwen3" # fallback or actual
+                    "model": settings.EMBED_MODEL or "text-embedding-qwen3",
                 }
             )
             if resp.status_code == 200:

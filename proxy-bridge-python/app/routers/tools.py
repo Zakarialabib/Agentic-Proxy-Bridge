@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from app.services.tool_service import tool_registry
 
-router = APIRouter(prefix="/api/tools", tags=["Tools"])
+router = APIRouter(tags=["Tools"])
 
 
 @router.get("/list")

@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/api/observability", tags=["Observability"])
+router = APIRouter(tags=["Observability"])
 
 
 class HealthComponent(BaseModel):

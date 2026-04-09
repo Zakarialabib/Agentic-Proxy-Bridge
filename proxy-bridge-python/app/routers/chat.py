@@ -10,6 +10,22 @@ import httpx
 
 router = APIRouter(prefix="/v1", tags=["Chat"])
 
+def _normalize_generation_payload(payload: dict) -> dict:
+    payload = dict(payload)
+    if payload.get("max_tokens") is None:
+        for key in ("maxTokens", "max_completion_tokens", "maxCompletionTokens"):
+            if payload.get(key) is not None:
+                payload["max_tokens"] = payload[key]
+                break
+    if payload.get("contextWindow") is None and payload.get("context_window") is not None:
+        payload["contextWindow"] = payload["context_window"]
+    if payload.get("thinking") is None:
+        for key in ("enableReasoning", "reasoning", "thinkingMode"):
+            if payload.get(key) is not None:
+                payload["thinking"] = payload[key]
+                break
+    return payload
+
 @router.post("/chat/completions")
 async def create_chat_completion(request: ChatCompletionRequest):
     client = connection_pool.get_client("openai")
@@ -20,6 +36,20 @@ async def create_chat_completion(request: ChatCompletionRequest):
     
     # Forward the payload
     payload = request.model_dump(exclude_none=True, by_alias=True)
+    payload = _normalize_generation_payload(payload)
+
+    if not payload.get("messages"):
+        prompt = request.prompt or request.input
+        if prompt:
+            payload["messages"] = [{"role": "user", "content": prompt}]
+        else:
+            return JSONResponse(
+                status_code=422,
+                content={"error": {"message": "Either 'messages' or 'prompt' is required", "type": "invalid_request_error"}},
+            )
+
+    payload.pop("prompt", None)
+    payload.pop("input", None)
     
     # Map the model name from custom openclaw format to actual LM Studio model
     mapped_model = map_model_name(payload.get("model", ""))
@@ -39,8 +69,11 @@ async def create_chat_completion(request: ChatCompletionRequest):
         print(f"[Chat] model_validation_failed: {str(e)}")
     
     # Context window engineering: Enforce tokens and preserve system prompt
-    context_limit = payload.pop("contextWindow", 16000)
+    context_limit = payload.pop("contextWindow", payload.pop("context_window", 16000))
     payload["messages"] = enforce_context_window(payload.get("messages", []), max_tokens=context_limit)
+
+    if payload.get("max_tokens") is None:
+        payload["max_tokens"] = min(max(context_limit // 2, 512), max(context_limit, 512))
 
     # --- Cognitive Mode Switch (Initial Hop) ---
     if "tools" in payload and payload["tools"]:
@@ -55,6 +88,10 @@ async def create_chat_completion(request: ChatCompletionRequest):
     if request.stream:
         ACTIVE_CONNECTIONS.inc()
         try:
+            original_messages = [
+                m.model_dump() if hasattr(m, "model_dump") else m
+                for m in (request.messages or [])
+            ]
             req = client.build_request(
                 "POST",
                 f"{settings.lm_studio_base_url}/v1/chat/completions",
@@ -66,7 +103,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
             
             # Use the agentic interceptor for streaming
             return StreamingResponse(
-                intercept_and_execute_tools(response, payload, request.messages),
+                intercept_and_execute_tools(response, payload, original_messages),
                 media_type="text/event-stream"
             )
         except httpx.HTTPStatusError as e:

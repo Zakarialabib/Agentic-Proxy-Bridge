@@ -7,9 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { Send, Sparkles, Settings, RefreshCw, Command, Zap } from 'lucide-react'
-import type { ModelPresetConfig } from '@/lib/types'
+import type { ModelPresetConfig, ModelInfo } from '@/lib/types'
 import { ModelSelector } from '@/components/model-selector'
 import { cn } from '@/lib/utils'
+import type { LoadedModelInstance } from '@/hooks/use-models'
 
 interface ChatInputProps {
   isLoading: boolean
@@ -24,8 +25,16 @@ interface ChatInputProps {
   onRefreshModels: () => void
   showModelSelector: boolean
   onShowModelSelector: (show: boolean) => void
+  availableModels: ModelInfo[]
+  loadedModels: LoadedModelInstance[]
+  onLoadModel: (modelId: string) => Promise<void> | void
+  onUnloadModel: (modelId: string) => Promise<void> | void
+  loadingModel: string | null
+  modelError?: string | null
   showAdvancedSettings: boolean
   onShowAdvancedSettings: (show: boolean) => void
+  streamingEnabled: boolean
+  onStreamingChange: (enabled: boolean) => void
   chatTemperature: number
   chatTopP: number
   chatMinP: number
@@ -33,6 +42,7 @@ interface ChatInputProps {
   chatMaxTokens: number
   chatContextLength: number
   chatThinkingMode: boolean
+  contextStrategy: 'full' | 'prune' | 'summarize'
   systemPrompt: string
   onTemperatureChange: (value: number) => void
   onTopPChange: (value: number) => void
@@ -41,6 +51,7 @@ interface ChatInputProps {
   onMaxTokensChange: (value: number) => void
   onContextLengthChange: (value: number) => void
   onThinkingModeChange: (enabled: boolean) => void
+  onContextStrategyChange: (value: 'full' | 'prune' | 'summarize') => void
   onSystemPromptChange: (value: string) => void
 }
 
@@ -57,8 +68,16 @@ export function ChatInput({
   onRefreshModels,
   showModelSelector,
   onShowModelSelector,
+  availableModels,
+  loadedModels,
+  onLoadModel,
+  onUnloadModel,
+  loadingModel,
+  modelError = null,
   showAdvancedSettings,
   onShowAdvancedSettings,
+  streamingEnabled,
+  onStreamingChange,
   chatTemperature,
   chatTopP,
   chatMinP,
@@ -66,6 +85,7 @@ export function ChatInput({
   chatMaxTokens,
   chatContextLength,
   chatThinkingMode,
+  contextStrategy,
   systemPrompt,
   onTemperatureChange,
   onTopPChange,
@@ -74,6 +94,7 @@ export function ChatInput({
   onMaxTokensChange,
   onContextLengthChange,
   onThinkingModeChange,
+  onContextStrategyChange,
   onSystemPromptChange,
 }: ChatInputProps) {
   
@@ -148,6 +169,12 @@ export function ChatInput({
             </h3>
             <ModelSelector 
               selectedModel={currentModel ?? undefined}
+              availableModels={availableModels}
+              loadedModels={loadedModels}
+              onLoadModel={onLoadModel}
+              onUnloadModel={onUnloadModel}
+              loadingModel={loadingModel}
+              error={modelError}
               onModelLoaded={(modelId) => {
                 onModelSelect(modelId)
                 onShowModelSelector(false)
@@ -202,7 +229,7 @@ export function ChatInput({
                   </div>
                 </div>
                 <div className="space-y-3">
-                   <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-2">
                     <Label className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Reasoning</Label>
                     <div className="flex items-center gap-2 bg-slate-900/40 p-2 rounded-lg border border-slate-700">
                       <Switch
@@ -210,7 +237,18 @@ export function ChatInput({
                         onCheckedChange={onThinkingModeChange}
                         className="scale-75 origin-left"
                       />
-                      <span className="text-[10px] text-slate-300">Force /think tags</span>
+                      <span className="text-[10px] text-slate-300">Enable thinking</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Streaming</Label>
+                    <div className="flex items-center gap-2 bg-slate-900/40 p-2 rounded-lg border border-slate-700">
+                      <Switch
+                        checked={streamingEnabled}
+                        onCheckedChange={onStreamingChange}
+                        className="scale-75 origin-left"
+                      />
+                      <span className="text-[10px] text-slate-300">Stream tokens</span>
                     </div>
                   </div>
                   <div className="space-y-1">
@@ -225,6 +263,19 @@ export function ChatInput({
                         <SelectItem value="8192">8K</SelectItem>
                         <SelectItem value="16384">16K</SelectItem>
                         <SelectItem value="32768">32K</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-slate-400">Context Strategy</Label>
+                    <Select value={contextStrategy} onValueChange={(v) => onContextStrategyChange(v as 'full' | 'prune' | 'summarize')}>
+                      <SelectTrigger className="h-7 bg-slate-900/50 border-slate-700 text-white text-[10px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-slate-700">
+                        <SelectItem value="full">Full</SelectItem>
+                        <SelectItem value="prune">Prune</SelectItem>
+                        <SelectItem value="summarize">Summarize</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
