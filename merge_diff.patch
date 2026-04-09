@@ -1,0 +1,672 @@
+diff --git a/README.md b/README.md
+index bf23506..3bd68c4 100644
+--- a/README.md
++++ b/README.md
+@@ -29,7 +29,10 @@ The web dashboard is split into focused panels designed to give you absolute con
+ ### 1. Dashboard
+ System overview with connection status, VRAM budget, active models, and hardware metrics.
+ 
+-### 2. Control Space (Chat Interface)
++### 2. Kanva (Drag & Drop Canvas)
++A stable, interactive drag-and-drop workspace built with `@dnd-kit`. Create and arrange interface components dynamically from a rich component library, enabling visual planning and spatial arrangement of your application's layout.
++
++### 3. Control Space (Chat Interface)
+ A deeply customizable chat interface with real-time streaming, model selection, and parameter tuning.
+ - **Model Selection**: Select and load/unload models directly from the sidebar
+ - **Agentic Scenarios**: One-click UI cards that reconfigure the model's System Prompt, compute parameters, and available Tools.
+diff --git a/docs/user_guide.md b/docs/user_guide.md
+index 3477e7e..50ee711 100644
+--- a/docs/user_guide.md
++++ b/docs/user_guide.md
+@@ -47,6 +47,20 @@ Open http://localhost:5173
+ 
+ ---
+ 
++## Workflow 1.5: Kanva Workspace
++
++**Purpose**: Visually design and layout components using a stable drag-and-drop interface.
++
++1. Navigate to the **Kanva** panel from the top navigation.
++2. Drag components (Text Block, Image, Button, Container) from the left Components library.
++3. Drop them onto the central Canvas Area.
++4. Rearrange components within the canvas by dragging them by their grip handles.
++5. Use "Clear Canvas" to reset the workspace.
++
++**Expected**: Components should smoothly snap into place with visual feedback during drag operations.
++
++---
++
+ ## Workflow 2: Control Space (Chat)
+ 
+ **Purpose**: Chat with your local LLM with full parameter control.
+diff --git a/frontend-vite/src/App.tsx b/frontend-vite/src/App.tsx
+index 92732dc..d38a568 100644
+--- a/frontend-vite/src/App.tsx
++++ b/frontend-vite/src/App.tsx
+@@ -63,6 +63,7 @@ const ProtocolsPanel = lazy(() => import('@/components/features/ProtocolsPanel')
+ const ToolsPanel = lazy(() => import('@/components/features/ToolsPanel').then(m => ({ default: m.ToolsPanel })))
+ const ObservabilityPanel = lazy(() => import('@/components/features/ObservabilityPanel').then(m => ({ default: m.ObservabilityPanel })))
+ const ChatPanel = lazy(() => import('@/components/features/ChatPanel').then(m => ({ default: m.ChatPanel })))
++const KanvaPanel = lazy(() => import('@/components/features/KanvaPanel').then(m => ({ default: m.KanvaPanel })))
+ 
+ const PROXY_BRIDGE_URL = ''
+ 
+@@ -176,6 +177,8 @@ export default function App() {
+     switch (activeTab) {
+       case 'dashboard':
+         return <ErrorBoundary><DashboardPanel /></ErrorBoundary>
++      case 'kanva':
++        return <ErrorBoundary><KanvaPanel /></ErrorBoundary>
+       case 'worklog':
+         return <ErrorBoundary><WorklogPanel entries={worklogs} /></ErrorBoundary>
+       case 'gateway':
+diff --git a/frontend-vite/src/components/features/KanvaPanel.tsx b/frontend-vite/src/components/features/KanvaPanel.tsx
+new file mode 100644
+index 0000000..6a120a7
+--- /dev/null
++++ b/frontend-vite/src/components/features/KanvaPanel.tsx
+@@ -0,0 +1,124 @@
++// src/components/features/KanvaPanel.tsx
++import React from 'react';
++import {
++  DndContext,
++  DragOverlay,
++  closestCenter,
++  KeyboardSensor,
++  PointerSensor,
++  useSensor,
++  useSensors,
++} from '@dnd-kit/core';
++import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
++import { Layout, GripVertical } from 'lucide-react';
++import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
++
++import { KanvaProvider, useKanva } from './kanva/context/KanvaContext';
++import { useKanvaDragDrop } from './kanva/hooks/useKanvaDragDrop';
++import { COMPONENT_LIBRARY } from './kanva/constants';
++import { LibraryItem } from './kanva/components/LibraryItem';
++import { CanvasArea } from './kanva/components/CanvasArea';
++import { renderComponentContent } from './kanva/components/ComponentRenderer';
++
++const KanvaWorkspace = () => {
++  const { canvasItems, clearCanvas, activeItem } = useKanva();
++  const { handleDragStart, handleDragOver, handleDragEnd, handleDragCancel } = useKanvaDragDrop();
++
++  const sensors = useSensors(
++    useSensor(PointerSensor, {
++      activationConstraint: {
++        distance: 5,
++      },
++    }),
++    useSensor(KeyboardSensor, {
++      coordinateGetter: sortableKeyboardCoordinates,
++    })
++  );
++
++  return (
++    <div className="h-full w-full flex flex-col gap-6 p-6">
++      <div className="flex items-center justify-between">
++        <div>
++          <h1 className="text-3xl font-bold tracking-tight">Kanva Workflow Builder</h1>
++          <p className="text-muted-foreground">Drag and drop agentic components to design your AI pipeline.</p>
++        </div>
++        <div className="flex gap-2">
++          <button 
++            onClick={clearCanvas}
++            className="px-4 py-2 text-sm font-medium border rounded-md hover:bg-muted/50 transition-colors"
++            disabled={canvasItems.length === 0}
++          >
++            Clear Canvas
++          </button>
++          <button 
++            className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
++          >
++            Save Layout
++          </button>
++        </div>
++      </div>
++
++      <DndContext
++        sensors={sensors}
++        collisionDetection={closestCenter}
++        onDragStart={handleDragStart}
++        onDragOver={handleDragOver}
++        onDragEnd={handleDragEnd}
++        onDragCancel={handleDragCancel}
++      >
++        <div className="flex flex-1 gap-6 h-[calc(100vh-12rem)] min-h-[600px]">
++          {/* Component Library Sidebar */}
++          <Card className="w-64 shrink-0 flex flex-col overflow-hidden">
++            <CardHeader className="py-4 border-b bg-muted/20">
++              <CardTitle className="text-lg font-semibold flex items-center gap-2">
++                <Layout className="w-5 h-5" />
++                Components
++              </CardTitle>
++            </CardHeader>
++            <CardContent className="p-4 flex-1 overflow-y-auto">
++              <div className="flex flex-col gap-3">
++                {COMPONENT_LIBRARY.map((item) => (
++                  <LibraryItem key={item.id} item={item} />
++                ))}
++              </div>
++            </CardContent>
++          </Card>
++
++          {/* Main Canvas Area */}
++          <div className="flex-1 flex flex-col bg-muted/10 rounded-xl border p-2 overflow-hidden shadow-inner">
++            <CanvasArea />
++          </div>
++        </div>
++
++        {/* Drag Overlay for smooth dragging visual */}
++        <DragOverlay dropAnimation={{ duration: 250, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
++          {activeItem ? (
++            'canvasId' in activeItem ? (
++              // Dragging from canvas
++              <div className="rounded-md border-2 border-primary bg-card text-card-foreground shadow-xl opacity-90 scale-105 transition-transform">
++                <div className="p-4">
++                  {renderComponentContent(activeItem.type, activeItem.label)}
++                </div>
++              </div>
++            ) : (
++              // Dragging from library
++              <div className="flex items-center gap-3 p-3 rounded-md border-2 border-primary bg-card text-card-foreground shadow-xl opacity-90 scale-105 transition-transform">
++                <div className="text-primary">{activeItem.icon}</div>
++                <span className="text-sm font-medium">{activeItem.label}</span>
++                <GripVertical className="w-4 h-4 ml-auto text-primary" />
++              </div>
++            )
++          ) : null}
++        </DragOverlay>
++      </DndContext>
++    </div>
++  );
++};
++
++export const KanvaPanel = () => {
++  return (
++    <KanvaProvider>
++      <KanvaWorkspace />
++    </KanvaProvider>
++  );
++};
+diff --git a/frontend-vite/src/components/features/kanva/components/CanvasArea.tsx b/frontend-vite/src/components/features/kanva/components/CanvasArea.tsx
+new file mode 100644
+index 0000000..1cbda57
+--- /dev/null
++++ b/frontend-vite/src/components/features/kanva/components/CanvasArea.tsx
+@@ -0,0 +1,46 @@
++// src/components/features/kanva/components/CanvasArea.tsx
++import React from 'react';
++import { useDroppable } from '@dnd-kit/core';
++import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
++import { Layout } from 'lucide-react';
++import { cn } from '@/lib/utils';
++import { useKanva } from '../context/KanvaContext';
++import { CanvasSortableItem } from './CanvasSortableItem';
++
++export const CanvasArea = () => {
++  const { canvasItems } = useKanva();
++  const { setNodeRef, isOver } = useDroppable({
++    id: 'canvas-droppable',
++    data: {
++      type: 'canvas',
++    },
++  });
++
++  return (
++    <div
++      ref={setNodeRef}
++      className={cn(
++        "flex-1 min-h-[500px] p-6 rounded-lg border-2 border-dashed transition-colors flex flex-col gap-4 overflow-y-auto",
++        isOver ? "border-primary/50 bg-primary/5" : "border-muted bg-background",
++        canvasItems.length === 0 && "items-center justify-center"
++      )}
++    >
++      {canvasItems.length === 0 ? (
++        <div className="text-center text-muted-foreground flex flex-col items-center gap-2 justify-center h-full">
++          <Layout className="w-12 h-12 opacity-20 mb-2" />
++          <p className="text-lg font-medium text-slate-300">Drag and drop components to build your AI workflow</p>
++          <p className="text-sm text-slate-500">Start by dragging an LLM Node or Agent Supervisor from the library</p>
++        </div>
++      ) : (
++        <SortableContext 
++          items={canvasItems.map(item => item.canvasId)}
++          strategy={verticalListSortingStrategy}
++        >
++          {canvasItems.map((item) => (
++            <CanvasSortableItem key={item.canvasId} item={item} />
++          ))}
++        </SortableContext>
++      )}
++    </div>
++  );
++};
+diff --git a/frontend-vite/src/components/features/kanva/components/CanvasSortableItem.tsx b/frontend-vite/src/components/features/kanva/components/CanvasSortableItem.tsx
+new file mode 100644
+index 0000000..6d7d8e2
+--- /dev/null
++++ b/frontend-vite/src/components/features/kanva/components/CanvasSortableItem.tsx
+@@ -0,0 +1,54 @@
++// src/components/features/kanva/components/CanvasSortableItem.tsx
++import React from 'react';
++import { useSortable } from '@dnd-kit/sortable';
++import { CSS } from '@dnd-kit/utilities';
++import { GripVertical, Trash2 } from 'lucide-react';
++import { cn } from '@/lib/utils';
++import { CanvasItem } from '../types';
++import { useKanva } from '../context/KanvaContext';
++import { renderComponentContent } from './ComponentRenderer';
++
++export const CanvasSortableItem = ({ item }: { item: CanvasItem }) => {
++  const { removeItem } = useKanva();
++  const {
++    attributes,
++    listeners,
++    setNodeRef,
++    transform,
++    transition,
++    isDragging,
++  } = useSortable({ id: item.canvasId });
++
++  const style = {
++    transform: CSS.Translate.toString(transform),
++    transition,
++  };
++
++  return (
++    <div
++      ref={setNodeRef}
++      style={style}
++      className={cn(
++        "relative group rounded-md border bg-card text-card-foreground shadow-sm overflow-hidden",
++        isDragging && "opacity-50 z-50 shadow-md ring-2 ring-primary"
++      )}
++    >
++      <div 
++        {...attributes} 
++        {...listeners}
++        className="absolute top-2 right-10 p-1.5 bg-background/80 backdrop-blur-sm rounded-md border shadow-sm opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10"
++      >
++        <GripVertical className="w-4 h-4 text-muted-foreground" />
++      </div>
++      <button
++        onClick={() => removeItem(item.canvasId)}
++        className="absolute top-2 right-2 p-1.5 bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground backdrop-blur-sm rounded-md border shadow-sm opacity-0 group-hover:opacity-100 transition-all z-10"
++      >
++        <Trash2 className="w-4 h-4" />
++      </button>
++      <div className="p-4 relative">
++        {renderComponentContent(item.type, item.label)}
++      </div>
++    </div>
++  );
++};
+diff --git a/frontend-vite/src/components/features/kanva/components/ComponentRenderer.tsx b/frontend-vite/src/components/features/kanva/components/ComponentRenderer.tsx
+new file mode 100644
+index 0000000..c2d6a7a
+--- /dev/null
++++ b/frontend-vite/src/components/features/kanva/components/ComponentRenderer.tsx
+@@ -0,0 +1,75 @@
++// src/components/features/kanva/components/ComponentRenderer.tsx
++import React from 'react';
++import { BrainCircuit, Database, Network, Zap, Wrench } from 'lucide-react';
++import { ComponentType } from '../types';
++
++export const renderComponentContent = (type: ComponentType, label: string) => {
++  switch (type) {
++    case 'llm-node':
++      return (
++        <div className="p-4 bg-slate-900/80 rounded-md border border-purple-500/30 flex flex-col gap-2">
++          <div className="flex items-center gap-2">
++            <BrainCircuit className="w-5 h-5 text-purple-400" />
++            <span className="font-semibold text-slate-200">LLM Provider</span>
++          </div>
++          <div className="text-xs text-slate-400 mt-1">Configures model parameters and routing.</div>
++          <div className="mt-3 p-2 bg-slate-950 rounded text-xs text-slate-500 flex justify-between">
++            <span>Model: GPT-4o</span>
++            <span className="text-emerald-400">Ready</span>
++          </div>
++        </div>
++      );
++    case 'rag-node':
++      return (
++        <div className="p-4 bg-slate-900/80 rounded-md border border-emerald-500/30 flex flex-col gap-2">
++          <div className="flex items-center gap-2">
++            <Database className="w-5 h-5 text-emerald-400" />
++            <span className="font-semibold text-slate-200">Knowledge Base</span>
++          </div>
++          <div className="text-xs text-slate-400 mt-1">Connects to vector stores for document retrieval.</div>
++          <div className="mt-3 p-2 bg-slate-950 rounded text-xs text-slate-500">
++            <span>Index: internal-docs-v2</span>
++          </div>
++        </div>
++      );
++    case 'agent-node':
++      return (
++        <div className="p-4 bg-slate-900/80 rounded-md border border-cyan-500/30 flex flex-col gap-2">
++          <div className="flex items-center gap-2">
++            <Network className="w-5 h-5 text-cyan-400" />
++            <span className="font-semibold text-slate-200">Agent Supervisor</span>
++          </div>
++          <div className="text-xs text-slate-400 mt-1">Orchestrates multiple sub-agents and tools.</div>
++          <div className="flex gap-2 mt-2">
++            <span className="px-2 py-1 bg-cyan-500/10 text-cyan-400 text-[10px] rounded border border-cyan-500/20">Planning</span>
++            <span className="px-2 py-1 bg-cyan-500/10 text-cyan-400 text-[10px] rounded border border-cyan-500/20">Reflection</span>
++          </div>
++        </div>
++      );
++    case 'gateway-node':
++      return (
++        <div className="p-4 bg-slate-900/80 rounded-md border border-amber-500/30 flex flex-col gap-2">
++          <div className="flex items-center gap-2">
++            <Zap className="w-5 h-5 text-amber-400" />
++            <span className="font-semibold text-slate-200">API Gateway</span>
++          </div>
++          <div className="text-xs text-slate-400 mt-1">Handles intent routing, embedding, and security.</div>
++        </div>
++      );
++    case 'tool-node':
++      return (
++        <div className="p-4 bg-slate-900/80 rounded-md border border-blue-500/30 flex flex-col gap-2">
++          <div className="flex items-center gap-2">
++            <Wrench className="w-5 h-5 text-blue-400" />
++            <span className="font-semibold text-slate-200">Tool Executor</span>
++          </div>
++          <div className="text-xs text-slate-400 mt-1">Executes external API calls and scripts.</div>
++          <div className="mt-2 text-xs text-slate-500 bg-slate-950 p-2 rounded">
++            Connected: 3 tools
++          </div>
++        </div>
++      );
++    default:
++      return <div className="p-4 bg-slate-800 text-white rounded">{label}</div>;
++  }
++};
+diff --git a/frontend-vite/src/components/features/kanva/components/LibraryItem.tsx b/frontend-vite/src/components/features/kanva/components/LibraryItem.tsx
+new file mode 100644
+index 0000000..976d8b4
+--- /dev/null
++++ b/frontend-vite/src/components/features/kanva/components/LibraryItem.tsx
+@@ -0,0 +1,32 @@
++// src/components/features/kanva/components/LibraryItem.tsx
++import React from 'react';
++import { useDraggable } from '@dnd-kit/core';
++import { GripVertical } from 'lucide-react';
++import { cn } from '@/lib/utils';
++import { DraggableComponent } from '../types';
++
++export const LibraryItem = ({ item }: { item: DraggableComponent }) => {
++  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
++    id: item.id,
++    data: {
++      type: 'library-item',
++      item,
++    },
++  });
++
++  return (
++    <div
++      ref={setNodeRef}
++      {...listeners}
++      {...attributes}
++      className={cn(
++        "flex items-center gap-3 p-3 rounded-md border bg-card text-card-foreground shadow-sm cursor-grab active:cursor-grabbing hover:border-primary/50 transition-colors",
++        isDragging && "opacity-50"
++      )}
++    >
++      <div className="text-muted-foreground">{item.icon}</div>
++      <span className="text-sm font-medium">{item.label}</span>
++      <GripVertical className="w-4 h-4 ml-auto text-muted-foreground/50" />
++    </div>
++  );
++};
+diff --git a/frontend-vite/src/components/features/kanva/constants/index.tsx b/frontend-vite/src/components/features/kanva/constants/index.tsx
+new file mode 100644
+index 0000000..c2aad6f
+--- /dev/null
++++ b/frontend-vite/src/components/features/kanva/constants/index.tsx
+@@ -0,0 +1,12 @@
++// src/components/features/kanva/constants/index.tsx
++import React from 'react';
++import { BrainCircuit, Database, Network, Zap, Wrench } from 'lucide-react';
++import { DraggableComponent } from '../types';
++
++export const COMPONENT_LIBRARY: DraggableComponent[] = [
++  { id: 'lib-llm', type: 'llm-node', label: 'LLM Node', icon: <BrainCircuit className="w-4 h-4 text-purple-400" /> },
++  { id: 'lib-rag', type: 'rag-node', label: 'RAG Knowledge Base', icon: <Database className="w-4 h-4 text-emerald-400" /> },
++  { id: 'lib-agent', type: 'agent-node', label: 'Agent Supervisor', icon: <Network className="w-4 h-4 text-cyan-400" /> },
++  { id: 'lib-gateway', type: 'gateway-node', label: 'API Gateway', icon: <Zap className="w-4 h-4 text-amber-400" /> },
++  { id: 'lib-tool', type: 'tool-node', label: 'Tool Executor', icon: <Wrench className="w-4 h-4 text-blue-400" /> },
++];
+diff --git a/frontend-vite/src/components/features/kanva/context/KanvaContext.tsx b/frontend-vite/src/components/features/kanva/context/KanvaContext.tsx
+new file mode 100644
+index 0000000..537fa5c
+--- /dev/null
++++ b/frontend-vite/src/components/features/kanva/context/KanvaContext.tsx
+@@ -0,0 +1,53 @@
++// src/components/features/kanva/context/KanvaContext.tsx
++import React, { createContext, useContext, useState } from 'react';
++import { CanvasItem, DraggableComponent } from '../types';
++
++interface KanvaContextType {
++  canvasItems: CanvasItem[];
++  setCanvasItems: React.Dispatch<React.SetStateAction<CanvasItem[]>>;
++  activeId: string | null;
++  setActiveId: React.Dispatch<React.SetStateAction<string | null>>;
++  activeItem: DraggableComponent | CanvasItem | null;
++  setActiveItem: React.Dispatch<React.SetStateAction<DraggableComponent | CanvasItem | null>>;
++  removeItem: (id: string) => void;
++  clearCanvas: () => void;
++}
++
++const KanvaContext = createContext<KanvaContextType | undefined>(undefined);
++
++export const KanvaProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
++  const [canvasItems, setCanvasItems] = useState<CanvasItem[]>([]);
++  const [activeId, setActiveId] = useState<string | null>(null);
++  const [activeItem, setActiveItem] = useState<DraggableComponent | CanvasItem | null>(null);
++
++  const removeItem = (id: string) => {
++    setCanvasItems((items) => items.filter((item) => item.canvasId !== id));
++  };
++
++  const clearCanvas = () => setCanvasItems([]);
++
++  return (
++    <KanvaContext.Provider
++      value={{
++        canvasItems,
++        setCanvasItems,
++        activeId,
++        setActiveId,
++        activeItem,
++        setActiveItem,
++        removeItem,
++        clearCanvas,
++      }}
++    >
++      {children}
++    </KanvaContext.Provider>
++  );
++};
++
++export const useKanva = () => {
++  const context = useContext(KanvaContext);
++  if (context === undefined) {
++    throw new Error('useKanva must be used within a KanvaProvider');
++  }
++  return context;
++};
+diff --git a/frontend-vite/src/components/features/kanva/hooks/useKanvaDragDrop.ts b/frontend-vite/src/components/features/kanva/hooks/useKanvaDragDrop.ts
+new file mode 100644
+index 0000000..ae5db86
+--- /dev/null
++++ b/frontend-vite/src/components/features/kanva/hooks/useKanvaDragDrop.ts
+@@ -0,0 +1,124 @@
++// src/components/features/kanva/hooks/useKanvaDragDrop.ts
++import { DragStartEvent, DragEndEvent, DragOverEvent } from '@dnd-kit/core';
++import { arrayMove } from '@dnd-kit/sortable';
++import { useKanva } from '../context/KanvaContext';
++import { COMPONENT_LIBRARY } from '../constants';
++import { CanvasItem, DraggableComponent } from '../types';
++
++export const useKanvaDragDrop = () => {
++  const { canvasItems, setCanvasItems, setActiveId, setActiveItem } = useKanva();
++
++  const handleDragStart = (event: DragStartEvent) => {
++    const { active } = event;
++    setActiveId(active.id as string);
++    
++    const libraryItem = COMPONENT_LIBRARY.find(item => item.id === active.id);
++    if (libraryItem) {
++      setActiveItem(libraryItem);
++      return;
++    }
++    
++    const canvasItem = canvasItems.find(item => item.canvasId === active.id);
++    if (canvasItem) {
++      setActiveItem(canvasItem);
++    }
++  };
++
++  const handleDragOver = (event: DragOverEvent) => {
++    const { active, over } = event;
++    const isActiveLibraryItem = active.data.current?.type === 'library-item';
++    if (!isActiveLibraryItem) return;
++
++    const tempId = `${active.id}-temp`;
++    const isOverCanvas = over && (over.id === 'canvas-droppable' || canvasItems.some(item => item.canvasId === over.id));
++
++    setCanvasItems((items) => {
++      const existingIndex = items.findIndex(item => item.canvasId === tempId);
++      
++      if (isOverCanvas) {
++        const libraryItem = active.data.current?.item as DraggableComponent;
++        const tempItem: CanvasItem = { ...libraryItem, canvasId: tempId };
++        
++        const overIndex = items.findIndex(item => item.canvasId === over.id);
++        
++        if (existingIndex >= 0) {
++          const newIndex = overIndex >= 0 ? overIndex : items.length - 1;
++          if (existingIndex !== newIndex) {
++            return arrayMove(items, existingIndex, newIndex);
++          }
++          return items;
++        } else {
++          const newItems = [...items];
++          const insertIndex = overIndex >= 0 ? overIndex : items.length;
++          newItems.splice(insertIndex, 0, tempItem);
++          return newItems;
++        }
++      } else {
++        if (existingIndex >= 0) {
++          const newItems = [...items];
++          newItems.splice(existingIndex, 1);
++          return newItems;
++        }
++        return items;
++      }
++    });
++  };
++
++  const handleDragEnd = (event: DragEndEvent) => {
++    const { active, over } = event;
++    
++    setActiveId(null);
++    setActiveItem(null);
++
++    const isActiveLibraryItem = active.data.current?.type === 'library-item';
++    const tempId = `${active.id}-temp`;
++
++    if (isActiveLibraryItem) {
++      setCanvasItems((items) => {
++        const existingIndex = items.findIndex(item => item.canvasId === tempId);
++        if (existingIndex >= 0) {
++          const isOverCanvas = over && (over.id === 'canvas-droppable' || items.some(item => item.canvasId === over.id));
++          if (isOverCanvas) {
++            const newItems = [...items];
++            newItems[existingIndex] = {
++              ...newItems[existingIndex],
++              canvasId: `canvas-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
++            };
++            return newItems;
++          } else {
++            const newItems = [...items];
++            newItems.splice(existingIndex, 1);
++            return newItems;
++          }
++        }
++        return items;
++      });
++      return;
++    }
++
++    if (active.id !== over?.id && over && canvasItems.some(item => item.canvasId === active.id)) {
++      setCanvasItems((items) => {
++        const oldIndex = items.findIndex((item) => item.canvasId === active.id);
++        const newIndex = items.findIndex((item) => item.canvasId === over.id);
++        
++        if (oldIndex !== -1 && newIndex !== -1) {
++            return arrayMove(items, oldIndex, newIndex);
++        }
++        return items;
++      });
++    }
++  };
++
++  const handleDragCancel = () => {
++    setActiveId(null);
++    setActiveItem(null);
++    setCanvasItems((items) => items.filter(item => !item.canvasId.endsWith('-temp')));
++  };
++
++  return {
++    handleDragStart,
++    handleDragOver,
++    handleDragEnd,
++    handleDragCancel
++  };
++};
+diff --git a/frontend-vite/src/components/features/kanva/types/index.ts b/frontend-vite/src/components/features/kanva/types/index.ts
+new file mode 100644
+index 0000000..7dfcefa
+--- /dev/null
++++ b/frontend-vite/src/components/features/kanva/types/index.ts
+@@ -0,0 +1,15 @@
++// src/components/features/kanva/types/index.ts
++import { ReactNode } from 'react';
++
++export type ComponentType = 'llm-node' | 'rag-node' | 'agent-node' | 'gateway-node' | 'tool-node';
++
++export interface DraggableComponent {
++  id: string;
++  type: ComponentType;
++  label: string;
++  icon: ReactNode;
++}
++
++export interface CanvasItem extends DraggableComponent {
++  canvasId: string;
++}
+diff --git a/frontend-vite/src/components/layout/Navigation.tsx b/frontend-vite/src/components/layout/Navigation.tsx
+index 4394fe8..9fa7969 100644
+--- a/frontend-vite/src/components/layout/Navigation.tsx
++++ b/frontend-vite/src/components/layout/Navigation.tsx
+@@ -1,7 +1,7 @@
+ 
+ 
+ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+-import { Activity, BookOpen, Zap, Sparkles, Brain, Network, Wrench, Eye, MessageSquare } from 'lucide-react'
++import { Activity, BookOpen, Zap, Sparkles, Brain, Network, Wrench, Eye, MessageSquare, Layout } from 'lucide-react'
+ 
+ interface NavigationProps {
+   activeTab: string
+@@ -10,6 +10,7 @@ interface NavigationProps {
+ 
+ const tabs = [
+   { value: 'dashboard', icon: Activity, label: 'Dashboard' },
++  { value: 'kanva', icon: Layout, label: 'Kanva Workflow' },
+   { value: 'worklog', icon: BookOpen, label: 'Worklog' },
+   { value: 'gateway', icon: Zap, label: 'Gateway' },
+   { value: 'orchestrate', icon: Sparkles, label: 'Orchestrate' },
