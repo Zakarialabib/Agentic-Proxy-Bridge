@@ -410,11 +410,13 @@ async def intercept_and_execute_tools(
                 
                 client = connection_pool.get_client("openai")
                 headers = {"Content-Type": "application/json"}
+                timeout = httpx.Timeout(300.0, connect=10.0)
                 req = client.build_request(
                     "POST", 
                     f"{settings.lm_studio_base_url}/v1/chat/completions",
                     json=follow_up_payload,
-                    headers=headers
+                    headers=headers,
+                    timeout=timeout
                 )
                 next_response = await client.send(req, stream=True)
                 next_response.raise_for_status()
@@ -623,11 +625,15 @@ async def intercept_and_execute_tools(
                 client = connection_pool.get_client("openai")
                 headers = {"Content-Type": "application/json"}
                 
+                # Apply custom timeout specifically for generation to prevent 60s cutoff
+                timeout = httpx.Timeout(300.0, connect=10.0)
+                
                 req = client.build_request(
                     "POST", 
                     f"{settings.lm_studio_base_url}/v1/chat/completions",
                     json=follow_up_payload,
-                    headers=headers
+                    headers=headers,
+                    timeout=timeout
                 )
                 next_response = await client.send(req, stream=True)
                 next_response.raise_for_status()

@@ -207,28 +207,10 @@ class LMStudioContextController:
     ):
         """
         Dynamically adjust LM Studio's context window and gpu_offload based on agent state.
+        Note: Currently disabled because dynamic reloading clears LM Studio's KV Cache,
+        which causes massive performance degradation on multi-hop agent requests.
         """
-        if model_id:
-            self.current_model_id = model_id
-
-        target_layers = 16 if cognitive_mode == "router" else 32
-        if target_layers != self.current_gpu_layers and self.current_model_id:
-            await self._set_gpu_layers(target_layers)
-            self.current_gpu_layers = target_layers
-
-        # Context Window Adjustments
-        if hop_count > 2 and tool_results_size > 1000:
-            # About to enter heavy reasoning, reduce context to prevent OOM
-            new_context = 2048
-        elif hop_count == 0:
-            # Fresh conversation, standard context
-            new_context = 4096
-        else:
-            new_context = self.current_context
-            
-        if new_context != self.current_context and self.current_model_id:
-            await self._set_context_length(new_context)
-            self.current_context = new_context
+        return
             
     async def _set_gpu_layers(self, layers: int):
         """
