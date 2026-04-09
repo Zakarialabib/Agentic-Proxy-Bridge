@@ -169,6 +169,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
                       details: data.details,
                       timestamp: Date.now()
                     })
+                    // If it's a tool_result telemetry, we can close the tool_call tag and append the response!
+                    if (data.event === 'tool_result') {
+                       assistantContent += `\n</tool_call>\n<tool_response>\n${data.details}\n</tool_response>\n`
+                       lastMsg.content = assistantContent
+                    }
                   }
                   return { messages: msgs }
                 })
@@ -176,8 +181,31 @@ export const useChatStore = create<ChatState>()((set, get) => ({
               }
 
               const delta = data.choices?.[0]?.delta?.content
-              if (delta) {
-                assistantContent += delta
+              const toolCalls = data.choices?.[0]?.delta?.tool_calls
+              
+              if (delta || toolCalls) {
+                if (delta) {
+                  assistantContent += delta
+                }
+                
+                if (toolCalls && toolCalls.length > 0) {
+                  for (const tc of toolCalls) {
+                    if (tc.function && tc.function.arguments) {
+                      // If it's the start of a tool call (has name), inject the opening tag
+                      if (tc.function.name) {
+                        assistantContent += `\n<tool_call>\n{"name": "${tc.function.name}", "arguments": `
+                      }
+                      assistantContent += tc.function.arguments
+                    }
+                  }
+                  // We don't close the tag immediately because arguments stream in chunks.
+                  // The proxy handles closing the tag or the next message starts.
+                  // Actually, the proxy streams the raw JSON string in arguments.
+                  // Wait, if the proxy streams raw JSON content, the frontend needs to know when it ends.
+                  // The proxy currently streams the raw content inside `<tool_call>` via `tc.function.arguments`.
+                  // The proxy itself intercepts `<tool_call>` and parses it, so `content` is the JSON.
+                }
+
                 set((state) => {
                   const msgs = [...state.messages]
                   const lastMsg = msgs[msgs.length - 1]

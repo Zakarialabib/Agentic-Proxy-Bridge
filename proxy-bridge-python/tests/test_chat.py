@@ -1,8 +1,10 @@
+import pytest
 
 import httpx
 import json
 import asyncio
 
+@pytest.mark.asyncio
 async def test_chat():
     url = "http://localhost:3001/v1/chat/completions"
     payload = {

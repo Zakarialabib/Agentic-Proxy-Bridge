@@ -239,6 +239,11 @@ async def intercept_and_execute_tools(
         recursive_hops += 1
         is_tool_call_mode = False
         tool_call_buffer = ""
+        assistant_content = ""
+        finish_reason = None
+        last_data_id = f"chatcmpl-{recursive_hops}"
+        last_created = 0
+        last_model = original_payload.get("model", "")
         buffer = ""
         
         try:
@@ -260,25 +265,46 @@ async def intercept_and_execute_tools(
                         continue
                     
                     if line.strip() == "data: [DONE]":
-                        if not is_tool_call_mode:
-                            yield (line + "\n\n").encode("utf-8")
                         continue
                         
                     data_str = line[6:]
                     try:
                         data = json.loads(data_str)
                         content = ""
-                        # Standard OpenAI Delta format
-                        if data.get("choices") and data["choices"][0].get("delta", {}).get("content"):
-                            content = data["choices"][0]["delta"]["content"]
-                            
+                        last_data_id = data.get("id", last_data_id)
+                        last_created = data.get("created", last_created)
+                        last_model = data.get("model", last_model)
+                        
+                        choices = data.get("choices", [])
+                        if choices:
+                            delta = choices[0].get("delta", {})
+                            if delta.get("content"):
+                                content = delta["content"]
+                            if choices[0].get("finish_reason"):
+                                finish_reason = choices[0]["finish_reason"]
+                                
                         if content:
                             if _looks_like_tool_block(content) or _looks_like_tool_block(tool_call_buffer):
                                 is_tool_call_mode = True
                             
                             if is_tool_call_mode:
+                                is_first_tool_chunk = (len(tool_call_buffer) == 0)
                                 tool_call_buffer += content
+                                
+                                function_delta = {"arguments": content}
+                                if is_first_tool_chunk:
+                                    function_delta["name"] = "agent_tool"
+                                    
+                                tool_call_delta = {
+                                    "id": last_data_id,
+                                    "object": "chat.completion.chunk",
+                                    "created": last_created,
+                                    "model": last_model,
+                                    "choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "id": f"call_{recursive_hops}", "type": "function", "function": function_delta}]}, "finish_reason": None}]
+                                }
+                                yield f"data: {json.dumps(tool_call_delta)}\n\n".encode("utf-8")
                             else:
+                                assistant_content += content
                                 yield (line + "\n\n").encode("utf-8")
                         else:
                             if not is_tool_call_mode:
@@ -290,6 +316,32 @@ async def intercept_and_execute_tools(
             # Close the current response once processing finished
             await current_response.aclose()
             ACTIVE_CONNECTIONS.dec()
+            
+            if finish_reason == "length" and not is_tool_call_mode:
+                yield _telemetry_bytes("auto_continue", "Context length reached. Automatically continuing generation...")
+                current_messages.append({"role": "assistant", "content": assistant_content})
+                current_messages.append({"role": "user", "content": "[SYSTEM: Context length reached. Please continue exactly where you left off.]"})
+                
+                from app.services.context_builder import enforce_context_window
+                max_tokens = original_payload.get("max_tokens") or 8192
+                current_goal = ""
+                strategy = original_payload.get("context_strategy") or "full"
+                current_messages = await apply_context_strategy(current_messages, current_goal, strategy, max_tokens)
+                follow_up_payload = {**original_payload, "messages": enforce_context_window(current_messages, max_tokens)}
+                
+                client = connection_pool.get_client("openai")
+                headers = {"Content-Type": "application/json"}
+                req = client.build_request(
+                    "POST", 
+                    f"{settings.lm_studio_base_url}/v1/chat/completions",
+                    json=follow_up_payload,
+                    headers=headers
+                )
+                next_response = await client.send(req, stream=True)
+                next_response.raise_for_status()
+                current_response = next_response
+                continue
+                
             if is_tool_call_mode:
                 # NeMo-Style Guardrail Validation
                 is_valid, tool_data, parse_error = validator.validate_tool_call(tool_call_buffer)
@@ -344,11 +396,14 @@ async def intercept_and_execute_tools(
                     else:
                         content_val = f"Error: {call_result.error}"
                     
+                    tool_response_json = json.dumps({'name': tool_name, 'content': content_val})
+                    yield _telemetry_bytes("tool_result", tool_response_json)
+                    
                     # Construct follow-up
                     current_messages.append({"role": "assistant", "content": tool_call_content})
                     current_messages.append({
                         "role": "user",
-                        "content": f"<tool_response>\n{json.dumps({'name': tool_name, 'content': content_val})}\n</tool_response>"
+                        "content": f"<tool_response>\n{tool_response_json}\n</tool_response>"
                     })
                 else:
                     # JSON parsing failed or missing name, inject error and retry
@@ -481,4 +536,6 @@ async def intercept_and_execute_tools(
             ACTIVE_CONNECTIONS.dec()
             yield f'data: {{"error": "{str(e)}"}}\n\n'.encode("utf-8")
             break
+            
+    yield b"data: [DONE]\n\n"
 
