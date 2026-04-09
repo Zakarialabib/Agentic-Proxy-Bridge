@@ -104,9 +104,11 @@ export function MessageBubble({ role, content, modelUsed, isLast, telemetry }: M
   )
 
   const renderToolBlocks = (text: string) => {
-    const parts = text.split(/(<tool_call>[\s\S]*?<\/tool_call>|<tool_response>[\s\S]*?<\/tool_response>)/g);
+    // Split the text, optionally capturing the markdown wrappers
+    const parts = text.split(/(?:```xml\s*)?(<tool_call>[\s\S]*?<\/tool_call>)(?:\s*```)?|(?:```json\s*\/\/ Tool Response:[^\n]*\n\s*)?(<tool_response>[\s\S]*?<\/tool_response>)(?:\s*```)?/g);
     
     return parts.map((part, index) => {
+      if (!part) return null;
       if (part.startsWith('<tool_call>')) {
         const innerContent = part.replace(/<\/?tool_call>/g, '').trim();
         let toolName = 'Unknown Tool';

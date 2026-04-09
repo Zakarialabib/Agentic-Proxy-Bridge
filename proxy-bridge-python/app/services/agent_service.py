@@ -242,6 +242,10 @@ async def intercept_and_execute_tools(
     recursive_hops = 0
     profile = build_orchestration_profile(orchestration_mode)
     profile_max_steps = int(profile.get("max_steps") or MAX_REACT_STEPS)
+    
+    # Use a single stable ID for the entire SSE stream to maintain compatibility with standard OpenAI clients
+    import time
+    session_data_id = f"chatcmpl-agent-{int(time.time()*1000)}"
 
     try:
         requested_max_steps = original_payload.get("max_steps")
@@ -290,7 +294,7 @@ async def intercept_and_execute_tools(
         tool_call_buffer = ""
         assistant_content = ""
         finish_reason = None
-        last_data_id = f"chatcmpl-{recursive_hops}"
+        last_data_id = session_data_id
         last_created = 0
         last_model = original_payload.get("model", "")
         buffer = ""
@@ -340,20 +344,37 @@ async def intercept_and_execute_tools(
                                 is_first_tool_chunk = (len(tool_call_buffer) == 0)
                                 tool_call_buffer += content
                                 
-                                function_delta = {"arguments": content}
                                 if is_first_tool_chunk:
-                                    function_delta["name"] = "agent_tool"
+                                    # Inject markdown code block start so standard clients render the XML visibly
+                                    prefix_chunk = {
+                                        "id": last_data_id,
+                                        "object": "chat.completion.chunk",
+                                        "created": last_created,
+                                        "model": last_model,
+                                        "choices": [{"index": 0, "delta": {"content": "\n```xml\n"}, "finish_reason": None}]
+                                    }
+                                    yield f"data: {json.dumps(prefix_chunk)}\n\n".encode("utf-8")
                                     
-                                tool_call_delta = {
+                                # Stream the XML tool call as text content
+                                msg_chunk = {
                                     "id": last_data_id,
                                     "object": "chat.completion.chunk",
                                     "created": last_created,
                                     "model": last_model,
-                                    "choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "id": f"call_{recursive_hops}", "type": "function", "function": function_delta}]}, "finish_reason": None}]
+                                    "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}]
                                 }
-                                yield f"data: {json.dumps(tool_call_delta)}\n\n".encode("utf-8")
+                                yield f"data: {json.dumps(msg_chunk)}\n\n".encode("utf-8")
 
                                 if "</tool_call>" in tool_call_buffer:
+                                    # Close the markdown code block
+                                    suffix_chunk = {
+                                        "id": last_data_id,
+                                        "object": "chat.completion.chunk",
+                                        "created": last_created,
+                                        "model": last_model,
+                                        "choices": [{"index": 0, "delta": {"content": "\n```\n"}, "finish_reason": None}]
+                                    }
+                                    yield f"data: {json.dumps(suffix_chunk)}\n\n".encode("utf-8")
                                     break
                             else:
                                 assistant_content += content
@@ -470,6 +491,17 @@ async def intercept_and_execute_tools(
                     
                     tool_response_json = json.dumps({'name': tool_name, 'content': content_val})
                     yield _telemetry_bytes("tool_result", tool_response_json)
+                    
+                    # Yield the tool response directly as markdown text for generic clients
+                    response_markdown = f"\n```json\n// Tool Response: {tool_name}\n<tool_response>\n{tool_response_json}\n</tool_response>\n```\n"
+                    msg_chunk = {
+                        "id": last_data_id,
+                        "object": "chat.completion.chunk",
+                        "created": last_created,
+                        "model": last_model,
+                        "choices": [{"index": 0, "delta": {"content": response_markdown}, "finish_reason": None}]
+                    }
+                    yield f"data: {json.dumps(msg_chunk)}\n\n".encode("utf-8")
                     
                     # Construct follow-up
                     current_messages.append({"role": "assistant", "content": tool_call_content})

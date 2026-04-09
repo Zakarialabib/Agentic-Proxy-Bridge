@@ -169,11 +169,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
                       details: data.details,
                       timestamp: Date.now()
                     })
-                    // If it's a tool_result telemetry, we can close the tool_call tag and append the response!
-                    if (data.event === 'tool_result') {
-                       assistantContent += `\n</tool_call>\n<tool_response>\n${data.details}\n</tool_response>\n`
-                       lastMsg.content = assistantContent
-                    }
                   }
                   return { messages: msgs }
                 })
