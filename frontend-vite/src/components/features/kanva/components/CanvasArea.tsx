@@ -26,9 +26,10 @@ export const CanvasArea = () => {
       )}
     >
       {canvasItems.length === 0 ? (
-        <div className="text-center text-muted-foreground flex flex-col items-center gap-2">
-          <Layout className="w-10 h-10 opacity-20" />
-          <p>Drag and drop components here to build your canvas</p>
+        <div className="text-center text-muted-foreground flex flex-col items-center gap-2 justify-center h-full">
+          <Layout className="w-12 h-12 opacity-20 mb-2" />
+          <p className="text-lg font-medium text-slate-300">Drag and drop components to build your AI workflow</p>
+          <p className="text-sm text-slate-500">Start by dragging an LLM Node or Agent Supervisor from the library</p>
         </div>
       ) : (
         <SortableContext 

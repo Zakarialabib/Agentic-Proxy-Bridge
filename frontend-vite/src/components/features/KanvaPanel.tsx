@@ -39,8 +39,8 @@ const KanvaWorkspace = () => {
     <div className="h-full w-full flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Kanva</h1>
-          <p className="text-muted-foreground">Drag and drop components to build your interface.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Kanva Workflow Builder</h1>
+          <p className="text-muted-foreground">Drag and drop agentic components to design your AI pipeline.</p>
         </div>
         <div className="flex gap-2">
           <button 

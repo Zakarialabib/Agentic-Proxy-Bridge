@@ -10,7 +10,7 @@ interface NavigationProps {
 
 const tabs = [
   { value: 'dashboard', icon: Activity, label: 'Dashboard' },
-  { value: 'kanva', icon: Layout, label: 'Kanva' },
+  { value: 'kanva', icon: Layout, label: 'Kanva Workflow' },
   { value: 'worklog', icon: BookOpen, label: 'Worklog' },
   { value: 'gateway', icon: Zap, label: 'Gateway' },
   { value: 'orchestrate', icon: Sparkles, label: 'Orchestrate' },
