@@ -29,7 +29,10 @@ The web dashboard is split into focused panels designed to give you absolute con
 ### 1. Dashboard
 System overview with connection status, VRAM budget, active models, and hardware metrics.
 
-### 2. Control Space (Chat Interface)
+### 2. Kanva (Drag & Drop Canvas)
+A stable, interactive drag-and-drop workspace built with `@dnd-kit`. Create and arrange interface components dynamically from a rich component library, enabling visual planning and spatial arrangement of your application's layout.
+
+### 3. Control Space (Chat Interface)
 A deeply customizable chat interface with real-time streaming, model selection, and parameter tuning.
 - **Model Selection**: Select and load/unload models directly from the sidebar
 - **Agentic Scenarios**: One-click UI cards that reconfigure the model's System Prompt, compute parameters, and available Tools.

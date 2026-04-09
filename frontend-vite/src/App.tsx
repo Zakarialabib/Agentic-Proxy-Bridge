@@ -63,6 +63,7 @@ const ProtocolsPanel = lazy(() => import('@/components/features/ProtocolsPanel')
 const ToolsPanel = lazy(() => import('@/components/features/ToolsPanel').then(m => ({ default: m.ToolsPanel })))
 const ObservabilityPanel = lazy(() => import('@/components/features/ObservabilityPanel').then(m => ({ default: m.ObservabilityPanel })))
 const ChatPanel = lazy(() => import('@/components/features/ChatPanel').then(m => ({ default: m.ChatPanel })))
+const KanvaPanel = lazy(() => import('@/components/features/KanvaPanel').then(m => ({ default: m.KanvaPanel })))
 
 const PROXY_BRIDGE_URL = ''
 
@@ -176,6 +177,8 @@ export default function App() {
     switch (activeTab) {
       case 'dashboard':
         return <ErrorBoundary><DashboardPanel /></ErrorBoundary>
+      case 'kanva':
+        return <ErrorBoundary><KanvaPanel /></ErrorBoundary>
       case 'worklog':
         return <ErrorBoundary><WorklogPanel entries={worklogs} /></ErrorBoundary>
       case 'gateway':

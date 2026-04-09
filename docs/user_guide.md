@@ -47,6 +47,20 @@ Open http://localhost:5173
 
 ---
 
+## Workflow 1.5: Kanva Workspace
+
+**Purpose**: Visually design and layout components using a stable drag-and-drop interface.
+
+1. Navigate to the **Kanva** panel from the top navigation.
+2. Drag components (Text Block, Image, Button, Container) from the left Components library.
+3. Drop them onto the central Canvas Area.
+4. Rearrange components within the canvas by dragging them by their grip handles.
+5. Use "Clear Canvas" to reset the workspace.
+
+**Expected**: Components should smoothly snap into place with visual feedback during drag operations.
+
+---
+
 ## Workflow 2: Control Space (Chat)
 
 **Purpose**: Chat with your local LLM with full parameter control.

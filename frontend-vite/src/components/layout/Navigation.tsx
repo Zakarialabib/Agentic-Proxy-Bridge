@@ -1,7 +1,7 @@
 
 
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Activity, BookOpen, Zap, Sparkles, Brain, Network, Wrench, Eye, MessageSquare } from 'lucide-react'
+import { Activity, BookOpen, Zap, Sparkles, Brain, Network, Wrench, Eye, MessageSquare, Layout } from 'lucide-react'
 
 interface NavigationProps {
   activeTab: string
@@ -10,6 +10,7 @@ interface NavigationProps {
 
 const tabs = [
   { value: 'dashboard', icon: Activity, label: 'Dashboard' },
+  { value: 'kanva', icon: Layout, label: 'Kanva' },
   { value: 'worklog', icon: BookOpen, label: 'Worklog' },
   { value: 'gateway', icon: Zap, label: 'Gateway' },
   { value: 'orchestrate', icon: Sparkles, label: 'Orchestrate' },
