@@ -9,6 +9,8 @@ import {
   useSensors,
   DragStartEvent,
   DragEndEvent,
+  DragOverEvent,
+  DragCancelEvent,
   useDraggable,
   useDroppable,
 } from '@dnd-kit/core';
@@ -27,7 +29,8 @@ import {
   Circle, 
   Layout, 
   MousePointerClick,
-  GripVertical
+  GripVertical,
+  Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -98,7 +101,7 @@ const LibraryItem = ({ item }: { item: DraggableComponent }) => {
 };
 
 // Sortable item in the canvas
-const CanvasSortableItem = ({ item }: { item: CanvasItem }) => {
+const CanvasSortableItem = ({ item, onDelete }: { item: CanvasItem; onDelete: (id: string) => void }) => {
   const {
     attributes,
     listeners,
@@ -109,7 +112,7 @@ const CanvasSortableItem = ({ item }: { item: CanvasItem }) => {
   } = useSortable({ id: item.canvasId });
 
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Translate.toString(transform),
     transition,
   };
 
@@ -125,10 +128,16 @@ const CanvasSortableItem = ({ item }: { item: CanvasItem }) => {
       <div 
         {...attributes} 
         {...listeners}
-        className="absolute top-2 right-2 p-1.5 bg-background/80 backdrop-blur-sm rounded-md border shadow-sm opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+        className="absolute top-2 right-10 p-1.5 bg-background/80 backdrop-blur-sm rounded-md border shadow-sm opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
       >
         <GripVertical className="w-4 h-4 text-muted-foreground" />
       </div>
+      <button
+        onClick={() => onDelete(item.canvasId)}
+        className="absolute top-2 right-2 p-1.5 bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground backdrop-blur-sm rounded-md border shadow-sm opacity-0 group-hover:opacity-100 transition-all"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
       <div className="p-4">
         {renderComponentContent(item.type, item.label)}
       </div>
@@ -137,7 +146,7 @@ const CanvasSortableItem = ({ item }: { item: CanvasItem }) => {
 };
 
 // The droppable canvas area
-const CanvasArea = ({ items }: { items: CanvasItem[] }) => {
+const CanvasArea = ({ items, onDelete }: { items: CanvasItem[]; onDelete: (id: string) => void }) => {
   const { setNodeRef, isOver } = useDroppable({
     id: 'canvas-droppable',
     data: {
@@ -165,7 +174,7 @@ const CanvasArea = ({ items }: { items: CanvasItem[] }) => {
           strategy={verticalListSortingStrategy}
         >
           {items.map((item) => (
-            <CanvasSortableItem key={item.canvasId} item={item} />
+            <CanvasSortableItem key={item.canvasId} item={item} onDelete={onDelete} />
           ))}
         </SortableContext>
       )}
@@ -189,6 +198,10 @@ export const KanvaPanel = () => {
     })
   );
 
+  const handleDeleteItem = (id: string) => {
+    setCanvasItems((items) => items.filter((item) => item.canvasId !== id));
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
     setActiveId(active.id as string);
@@ -206,51 +219,95 @@ export const KanvaPanel = () => {
     }
   };
 
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    const isActiveLibraryItem = active.data.current?.type === 'library-item';
+    if (!isActiveLibraryItem) return;
+
+    const tempId = `${active.id}-temp`;
+    const isOverCanvas = over && (over.id === 'canvas-droppable' || canvasItems.some(item => item.canvasId === over.id));
+
+    setCanvasItems((items) => {
+      const existingIndex = items.findIndex(item => item.canvasId === tempId);
+      
+      if (isOverCanvas) {
+        const libraryItem = active.data.current?.item as DraggableComponent;
+        const tempItem: CanvasItem = { ...libraryItem, canvasId: tempId };
+        
+        const overIndex = items.findIndex(item => item.canvasId === over.id);
+        
+        if (existingIndex >= 0) {
+          const newIndex = overIndex >= 0 ? overIndex : items.length - 1;
+          if (existingIndex !== newIndex) {
+            return arrayMove(items, existingIndex, newIndex);
+          }
+          return items;
+        } else {
+          const newItems = [...items];
+          const insertIndex = overIndex >= 0 ? overIndex : items.length;
+          newItems.splice(insertIndex, 0, tempItem);
+          return newItems;
+        }
+      } else {
+        if (existingIndex >= 0) {
+          const newItems = [...items];
+          newItems.splice(existingIndex, 1);
+          return newItems;
+        }
+        return items;
+      }
+    });
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     
     setActiveId(null);
     setActiveItem(null);
 
-    if (!over) return;
+    const isActiveLibraryItem = active.data.current?.type === 'library-item';
+    const tempId = `${active.id}-temp`;
 
-    // Handle dragging from library to canvas
-    if (
-      active.data.current?.type === 'library-item' && 
-      (over.id === 'canvas-droppable' || over.data.current?.sortable)
-    ) {
-      const libraryItem = active.data.current.item as DraggableComponent;
-      const newItem: CanvasItem = {
-        ...libraryItem,
-        canvasId: `canvas-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      };
-
-      if (over.id === 'canvas-droppable') {
-        // Dropped on empty canvas or bottom of canvas
-        setCanvasItems((items) => [...items, newItem]);
-      } else {
-        // Dropped over an existing sortable item
-        setCanvasItems((items) => {
-          const overIndex = items.findIndex((item) => item.canvasId === over.id);
-          const newIndex = overIndex >= 0 ? overIndex : items.length;
-          
-          const newItems = [...items];
-          newItems.splice(newIndex, 0, newItem);
-          return newItems;
-        });
-      }
+    if (isActiveLibraryItem) {
+      setCanvasItems((items) => {
+        const existingIndex = items.findIndex(item => item.canvasId === tempId);
+        if (existingIndex >= 0) {
+          const isOverCanvas = over && (over.id === 'canvas-droppable' || items.some(item => item.canvasId === over.id));
+          if (isOverCanvas) {
+            const newItems = [...items];
+            newItems[existingIndex] = {
+              ...newItems[existingIndex],
+              canvasId: `canvas-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            };
+            return newItems;
+          } else {
+            const newItems = [...items];
+            newItems.splice(existingIndex, 1);
+            return newItems;
+          }
+        }
+        return items;
+      });
       return;
     }
 
-    // Handle reordering within canvas
-    if (active.id !== over.id && canvasItems.some(item => item.canvasId === active.id)) {
+    if (active.id !== over?.id && over && canvasItems.some(item => item.canvasId === active.id)) {
       setCanvasItems((items) => {
         const oldIndex = items.findIndex((item) => item.canvasId === active.id);
         const newIndex = items.findIndex((item) => item.canvasId === over.id);
         
-        return arrayMove(items, oldIndex, newIndex);
+        if (oldIndex !== -1 && newIndex !== -1) {
+            return arrayMove(items, oldIndex, newIndex);
+        }
+        return items;
       });
     }
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
+    setActiveItem(null);
+    setCanvasItems((items) => items.filter(item => !item.canvasId.endsWith('-temp')));
   };
 
   return (
@@ -280,7 +337,9 @@ export const KanvaPanel = () => {
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
         <div className="flex flex-1 gap-6 h-[calc(100vh-12rem)] min-h-[600px]">
           {/* Component Library Sidebar */}
@@ -302,7 +361,7 @@ export const KanvaPanel = () => {
 
           {/* Main Canvas Area */}
           <div className="flex-1 flex flex-col bg-muted/10 rounded-xl border p-2 overflow-hidden shadow-inner">
-            <CanvasArea items={canvasItems} />
+            <CanvasArea items={canvasItems} onDelete={handleDeleteItem} />
           </div>
         </div>
 
