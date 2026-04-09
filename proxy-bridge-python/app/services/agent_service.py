@@ -1,6 +1,9 @@
 import json
 import httpx
 import re
+import os
+import platform
+import datetime
 from typing import AsyncGenerator, List, Dict, Any, Optional
 from app.services.pool import connection_pool, ACTIVE_CONNECTIONS
 from app.services.tool_service import tool_registry
@@ -160,17 +163,31 @@ def prioritize_tools_for_mode(tools: List[Dict[str, Any]], mode: Optional[str]) 
 
 def build_orchestration_system_prompt(mode: Optional[str]) -> str:
     profile = build_orchestration_profile(mode)
-    tool_format = (
-        "Tool calls should use XML format:\n"
-        "<tool_call>\n"
-        "  <name>tool_name</name>\n"
-        "  <arguments>\n"
-        "    <arg_name>value</arg_name>\n"
-        "  </arguments>\n"
-        "</tool_call>\n"
-        "Do not invent file paths. If a path is unknown, call file_list first or ask the user."
+    
+    current_os = platform.system()
+    current_cwd = os.getcwd()
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    return (
+        f"<persona>\n{profile['system_prompt']}\n</persona>\n\n"
+        f"<environment>\n"
+        f"  <os>{current_os}</os>\n"
+        f"  <cwd>{current_cwd}</cwd>\n"
+        f"  <time>{current_time}</time>\n"
+        f"</environment>\n\n"
+        f"<rules>\n"
+        f"  1. Tool calls should use XML format:\n"
+        f"     <tool_call>\n"
+        f"       <name>tool_name</name>\n"
+        f"       <arguments>\n"
+        f"         <arg_name>value</arg_name>\n"
+        f"       </arguments>\n"
+        f"     </tool_call>\n"
+        f"  2. Do not invent file paths. If a path is unknown, call file_list first or ask the user.\n"
+        f"  3. You MUST wrap your reasoning in <thought>...</thought> blocks before calling tools or responding.\n"
+        f"  4. You MUST use <reflection>...</reflection> blocks to evaluate the results of tool calls and adjust your plan.\n"
+        f"</rules>"
     )
-    return f"{profile['system_prompt']}\n{tool_format}"
 
 async def _compress_tool_result(result_str: str, tool_name: str, model_id: str) -> str:
     """Active Compression Mode to summarize large tool results and prevent Amnesia."""
@@ -413,6 +430,20 @@ async def intercept_and_execute_tools(
                     args = tool_data.get("arguments") or tool_data.get("parameters") or {}
                     tool_call_content = re.sub(r"```[a-zA-Z0-9_-]*\n", "", tool_call_content).replace("```", "").strip()
                     
+                    if tool_name == "ask_user_question":
+                        question = args.get("question", "")
+                        # Yield the question directly to the user as content
+                        msg_chunk = {
+                            "id": last_data_id,
+                            "object": "chat.completion.chunk",
+                            "created": last_created,
+                            "model": last_model,
+                            "choices": [{"index": 0, "delta": {"content": f"\n\n[Question to User]: {question}"}, "finish_reason": "stop"}]
+                        }
+                        yield f"data: {json.dumps(msg_chunk)}\n\n".encode("utf-8")
+                        yield _telemetry_bytes("ask_user_question", f"Agent paused to ask user: {question}")
+                        break
+
                     # Execution
                     call_result = await tool_registry.execute(tool_name, args)
                     tool_budget_remaining = max(0, tool_budget_remaining - 1)

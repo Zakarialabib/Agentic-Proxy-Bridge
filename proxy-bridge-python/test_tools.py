@@ -26,5 +26,9 @@ async def main():
     res = await tool_registry.execute("query_knowledge_graph", {"query": "api"})
     print(res)
 
+    print("\nTesting ask_user_question:")
+    res = await tool_registry.execute("ask_user_question", {"question": "Are you there?"})
+    print(res)
+
 if __name__ == "__main__":
     asyncio.run(main())
