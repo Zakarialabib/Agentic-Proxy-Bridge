@@ -62,22 +62,23 @@ python -m vllm.entrypoints.openai.api_server \
 
 ## 3. Configuring the Proxy Bridge
 
-Now that vLLM is running on `http://localhost:8000`, you need to configure the Proxy Bridge to use it instead of LM Studio.
-
-1. Open the `.env` file in the `proxy-bridge-python` directory.
-2. Update the engine settings:
-
-```env
-# Switch the active backend from 'lmstudio' to 'vllm'
-ACTIVE_BACKEND=vllm
-
-# Ensure the vLLM base URL matches the port you launched vLLM on
-VLLM_BASE_URL=http://localhost:8000
-```
-
-3. Restart the Proxy Bridge:
+### Unified Startup (The Stepper)
+The easiest way to orchestrate vLLM is using our new interactive CLI:
 ```bash
 cd proxy-bridge-python
+python -m cli.main proxy
+```
+Follow the prompts to select **vllm** as the backend. The proxy will automatically scan your local models and handle the background subprocess.
+
+### Manual Configuration
+If you prefer manual control, update your `.env`:
+```env
+ACTIVE_BACKEND=vllm
+VLLM_BASE_URL=http://localhost:8000
+VLLM_MODEL=/path/to/your/model.gguf  # Optional: for auto-startup
+```
+Then start the bridge:
+```bash
 uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload
 ```
 
@@ -129,3 +130,23 @@ In the Agentic Control Space within the UI:
 **Model not appearing in UI dropdown**
 - Ensure `VLLM_BASE_URL` in `.env` is correct.
 - Verify vLLM is responding by running: `curl http://localhost:8000/v1/models`
+
+---
+
+## 6. 🚀 Next Phases: Evolutionary vLLM Orchestration
+
+Our roadmap for vLLM integration includes several advanced "Superpowers" currently being wired into the `AgentService`:
+
+### Distributed Agent Swarms
+We are moving toward a multi-model swarm architecture where the proxy can manage multiple vLLM instances simultaneously. This allows:
+- **Reasoning Swarms**: 3+ small models (e.g., Qwen 4B) voting on the best tool call in parallel.
+- **Specialized Worker Pools**: Dedicated vLLM instances for Coding (DeepSeek-Coder) vs. Vision (Llava) vs. General Chat (Qwen).
+
+### Dynamic Speculative Decoding
+Implementing "Drafting Proxies" where a lightweight local model (served via vLLM) generates draft tokens that are then validated by a larger reasoning model on the fly, drastically increasing perceived TPS without sacrificing Quality.
+
+### Remote vLLM over SSE
+Expanding the `VLLMAdapter` to support remote vLLM endpoints over secure SSE/HTTP transports, enabling you to use your home workstation's GPU from a mobile client via the Proxy Bridge.
+
+### Persistent KV Cache Management
+Hooking into vLLM's `prefix_caching` to maintain ultra-fast conversational speeds even when dealing with massive 32k+ context knowledge bases in RAG workflows.

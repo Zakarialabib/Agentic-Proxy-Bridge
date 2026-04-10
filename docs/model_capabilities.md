@@ -139,13 +139,13 @@ Comprehensive capability overview for models supported by LM Studio and the Prox
 
 ### Token Generation Speed (Approximate)
 
-| Model Size | CPU (tok/s) | GPU (tok/s) |
-|------------|-------------|-------------|
-| 1B-3B | 10-20 | 50-100 |
-| 4B-7B | 5-10 | 30-60 |
-| 8B-13B | 2-5 | 20-40 |
-| 14B-34B | 1-2 | 10-25 |
-| 70B+ | <1 | 5-15 |
+| Model Size | CPU (tok/s) | LM Studio GPU | vLLM GPU (WSL2) |
+|------------|-------------|---------------|----------------|
+| 1B-3B | 10-20 | 50-100 | 150-300+ |
+| 4B-7B | 5-10 | 30-60 | 80-150+ |
+| 8B-13B | 2-5 | 20-40 | 50-90+ |
+| 14B-34B | 1-2 | 10-25 | 20-50+ |
+| 70B+ | <1 | 5-15 | 8-20+ |
 
 ### Memory Usage
 

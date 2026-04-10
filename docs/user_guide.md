@@ -101,12 +101,9 @@ Open http://localhost:5173
 ### Using a Scenario
 1. Navigate to **Control Space**
 2. Open the **Scenarios** panel
-3. Click a scenario card:
-   - **Code Assistant**: Optimized for programming tasks
-   - **Deep Researcher**: Extended context, analytical prompts
-   - **Creative Writer**: Higher temperature, creative prompts
-   - **Data Analyst**: Structured output, precise responses
-4. The system automatically applies:
+3. Click a scenario card (e.g., **Code Assistant**)
+4. **Supervised Autonomy**: Toggle **Require Tool Approval** in the toolbar if you want to gate sensitive tool executions (like `write_file` or `web_search`).
+5. The system automatically applies:
    - System prompt
    - Compute parameters (temperature, top_p, max_tokens)
    - Available tools
