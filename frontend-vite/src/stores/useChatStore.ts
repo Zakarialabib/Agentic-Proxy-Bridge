@@ -23,15 +23,23 @@ interface ChatState {
   thinkingMode: boolean
   contextStrategy: 'full' | 'prune' | 'summarize'
   systemPrompt: string
+  enabledTools: string[]
+  orchestrationMode: 'adaptive' | 'mcp_only' | 'a2a_only' | 'local_only'
+  requireApproval: boolean
+  maxSteps: number
+  toolBudget: number
+  availableTools: any[]
 
   setModel: (modelId: string | null) => void
   setMessages: (messages: ChatMessage[]) => void
   addMessage: (message: ChatMessage) => void
   sendStreamingMessage: (content: string, options?: { stream?: boolean }) => Promise<void>
   setDraftMessage: (message: string) => void
-  setParams: (params: Partial<Pick<ChatState, 'temperature' | 'topP' | 'minP' | 'repeatPenalty' | 'maxTokens' | 'contextWindow' | 'thinkingMode' | 'contextStrategy' | 'systemPrompt'>>) => void
+  setParams: (params: Partial<Pick<ChatState, 'temperature' | 'topP' | 'minP' | 'repeatPenalty' | 'maxTokens' | 'contextWindow' | 'thinkingMode' | 'contextStrategy' | 'systemPrompt' | 'enabledTools' | 'orchestrationMode' | 'requireApproval' | 'maxSteps' | 'toolBudget'>>) => void
   clearMessages: () => void
   setLoading: (loading: boolean) => void
+  fetchTools: () => Promise<void>
+  toggleTool: (toolName: string) => void
 }
 
 export const useChatStore = create<ChatState>()((set, get) => ({
@@ -43,11 +51,17 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   topP: 0.9,
   minP: 0.05,
   repeatPenalty: 1.05,
-  maxTokens: 2048,
-  contextWindow: 4096,
+  maxTokens: 8192,
+  contextWindow: 8192,
   thinkingMode: false,
   contextStrategy: 'full',
   systemPrompt: '',
+  enabledTools: ['web_search', 'get_current_time', 'calculate', 'read_file', 'file_list'],
+  orchestrationMode: 'adaptive',
+  requireApproval: false,
+  maxSteps: 5,
+  toolBudget: 10,
+  availableTools: [],
 
   setModel: (modelId) => set({ selectedModel: modelId }),
 
@@ -57,8 +71,34 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   setDraftMessage: (message) => set({ draftMessage: message }),
 
+  fetchTools: async () => {
+    try {
+      const resp = await fetch(`${PROXY_BRIDGE_URL}/api/tools/list`)
+      if (resp.ok) {
+        const data = await resp.json()
+        set({ availableTools: data.tools || [] })
+      }
+    } catch (e) {
+      console.error('Failed to fetch tools:', e)
+    }
+  },
+
+  toggleTool: (toolName: string) => set((state) => {
+    const enabled = state.enabledTools.includes(toolName)
+    if (enabled) {
+      return { enabledTools: state.enabledTools.filter(t => t !== toolName) }
+    } else {
+      return { enabledTools: [...state.enabledTools, toolName] }
+    }
+  }),
+
   sendStreamingMessage: async (content: string, options?: { stream?: boolean }) => {
-    const { selectedModel, temperature, topP, minP, repeatPenalty, maxTokens, contextWindow, thinkingMode, systemPrompt } = get()
+    const { 
+      selectedModel, temperature, topP, minP, repeatPenalty, maxTokens, contextWindow, 
+      thinkingMode, systemPrompt, enabledTools, orchestrationMode, maxSteps, toolBudget, 
+      availableTools 
+    } = get()
+    
     if (!content.trim()) return
     if (!selectedModel) {
       set((state) => ({
@@ -94,23 +134,35 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         messages.unshift({ role: 'system', content: systemPrompt.trim() })
       }
 
+      // Filter tools to only send enabled ones
+      const toolsToSend = availableTools
+        .filter(t => enabledTools.includes(t.function.name))
+        .map(t => t)
+
       const stream = options?.stream ?? true
+      const requestBody: any = {
+        model: selectedModel,
+        messages,
+        stream,
+        temperature,
+        top_p: topP,
+        min_p: minP,
+        repeat_penalty: repeatPenalty,
+        max_tokens: maxTokens,
+        contextWindow,
+        thinking: thinkingMode,
+        context_strategy: get().contextStrategy,
+        tools: toolsToSend,
+        orchestration_mode: orchestrationMode,
+        max_steps: maxSteps,
+        tool_budget: toolBudget,
+        require_approval: get().requireApproval,
+      }
+      
       const response = await fetch(`${PROXY_BRIDGE_URL}/v1/agent/orchestrate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages,
-          stream,
-          temperature,
-          top_p: topP,
-          min_p: minP,
-          repeat_penalty: repeatPenalty,
-          max_tokens: maxTokens,
-          contextWindow,
-          thinking: thinkingMode,
-          context_strategy: get().contextStrategy,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
@@ -176,8 +228,31 @@ export const useChatStore = create<ChatState>()((set, get) => ({
               }
 
               const delta = data.choices?.[0]?.delta?.content
-              if (delta) {
-                assistantContent += delta
+              const toolCalls = data.choices?.[0]?.delta?.tool_calls
+              
+              if (delta || toolCalls) {
+                if (delta) {
+                  assistantContent += delta
+                }
+                
+                if (toolCalls && toolCalls.length > 0) {
+                  for (const tc of toolCalls) {
+                    if (tc.function && tc.function.arguments) {
+                      // If it's the start of a tool call (has name), inject the opening tag
+                      if (tc.function.name) {
+                        assistantContent += `\n<tool_call>\n{"name": "${tc.function.name}", "arguments": `
+                      }
+                      if (tc.function.arguments !== undefined) assistantContent += tc.function.arguments
+                    }
+                  }
+                  // We don't close the tag immediately because arguments stream in chunks.
+                  // The proxy handles closing the tag or the next message starts.
+                  // Actually, the proxy streams the raw JSON string in arguments.
+                  // Wait, if the proxy streams raw JSON content, the frontend needs to know when it ends.
+                  // The proxy currently streams the raw content inside `<tool_call>` via `tc.function.arguments`.
+                  // The proxy itself intercepts `<tool_call>` and parses it, so `content` is the JSON.
+                }
+
                 set((state) => {
                   const msgs = [...state.messages]
                   const lastMsg = msgs[msgs.length - 1]

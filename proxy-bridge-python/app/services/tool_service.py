@@ -16,6 +16,7 @@ class ToolDefinition:
     description: str
     parameters: Dict[str, Any]
     handler: Optional[Callable] = None
+    source: str = "builtin"
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -31,6 +32,29 @@ class ToolCallResult:
 
 TOOL_REGISTRY_SYNC_ENABLED = os.environ.get("LMSTUDIO_TOOL_REGISTRY_SYNC", "false").lower() in ("1", "true", "yes")
 _tool_registry_sync_disabled = False
+
+def tools_to_xml(tools: List[Dict[str, Any]]) -> str:
+    """Convert a list of OpenAI-format tools to compact XML."""
+    xml_parts = ["<tools>"]
+    for t in tools:
+        func = t.get("function", {})
+        name = func.get("name", "")
+        desc = func.get("description", "")
+        xml_parts.append(f'<tool name="{name}" description="{desc}">')
+        params = func.get("parameters", {}).get("properties", {})
+        req = func.get("parameters", {}).get("required", [])
+        if params:
+            xml_parts.append('<parameters>')
+            for pname, pinfo in params.items():
+                ptype = pinfo.get("type", "string")
+                pdesc = pinfo.get("description", "")
+                preq = "true" if pname in req else "false"
+                xml_parts.append(f'<param name="{pname}" type="{ptype}" required="{preq}" description="{pdesc}"/>')
+            xml_parts.append('</parameters>')
+        xml_parts.append('</tool>')
+    xml_parts.append("</tools>")
+    return "".join(xml_parts)
+
 
 class ToolRegistry:
     """Registry for tool definitions and handlers."""
@@ -95,6 +119,7 @@ class ToolRegistry:
         return [
             {
                 "type": "function",
+                "source": tool.source,
                 "function": {
                     "name": tool.name,
                     "description": tool.description,
@@ -103,6 +128,11 @@ class ToolRegistry:
             }
             for tool in self._tools.values()
         ]
+
+    def list_tools_xml(self) -> str:
+        """List all registered tools in compact XML format."""
+        return tools_to_xml(self.list_tools())
+
 
     async def execute(self, tool_name: str, arguments: Dict[str, Any]) -> ToolCallResult:
         """Execute a tool with given arguments."""
@@ -200,6 +230,7 @@ def register_builtin_tools():
     """Register built-in tools."""
 
     import os
+    from app.tools import local_fs
 
     def enforce_workspace(path: str) -> str:
         workspace_dir = os.path.abspath("/workspace")
@@ -297,18 +328,6 @@ def register_builtin_tools():
                 "content": str(e)
             }
 
-    async def read_file(path: str) -> Dict[str, Any]:
-        """Read contents of a file."""
-        if not path:
-            return {"status": "error", "content": "No path provided"}
-        try:
-            safe_path = enforce_workspace(path)
-            with open(safe_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            return {"status": "success", "content": content}
-        except Exception as e:
-            return {"status": "error", "content": str(e)}
-
     async def write_file(path: str, content: str) -> Dict[str, Any]:
         """Write content to a file."""
         try:
@@ -343,7 +362,26 @@ def register_builtin_tools():
             "content": results if results else "No matching nodes found."
         }
 
+    async def ask_user_question(question: str) -> Dict[str, Any]:
+        """Ask the user a question to gather more information or clarify something."""
+        return {
+            "status": "success",
+            "question": question
+        }
+
     tools = [
+        ToolDefinition(
+            name="ask_user_question",
+            description="Ask the user a question to gather more information or clarify something",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string", "description": "The question to ask the user"},
+                },
+                "required": ["question"],
+            },
+            handler=ask_user_question,
+        ),
         ToolDefinition(
             name="search_knowledge_base",
             description="Search the knowledge base for information",
@@ -401,7 +439,32 @@ def register_builtin_tools():
                 },
                 "required": ["path"],
             },
-            handler=read_file,
+            handler=local_fs.read_file,
+        ),
+        ToolDefinition(
+            name="search_dir",
+            description="Search for files in a directory",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "The directory path to search", "default": "."},
+                    "pattern": {"type": "string", "description": "The pattern to match in file names", "default": ""},
+                },
+                "required": [],
+            },
+            handler=local_fs.search_dir,
+        ),
+        ToolDefinition(
+            name="run_read_only_command",
+            description="Run a read-only shell command",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "The shell command to execute"},
+                },
+                "required": ["command"],
+            },
+            handler=local_fs.run_read_only_command,
         ),
         ToolDefinition(
             name="write_file",
@@ -451,7 +514,7 @@ def register_builtin_tools():
                 },
                 "required": ["path"],
             },
-            handler=read_file,
+            handler=local_fs.read_file,
         ),
     ]
 

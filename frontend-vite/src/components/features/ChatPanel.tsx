@@ -4,7 +4,7 @@ import type { ProxyStatus, ModelPresetConfig, ModelInfo } from '@/lib/types'
 import type { LoadedModelInstance } from '@/hooks/use-models'
 import { MessageList } from './chat/MessageList'
 import { ChatInput } from './chat/ChatInput'
-import { ChatSettings } from './chat/ChatSettings'
+import { AgenticToolbar } from './chat/AgenticToolbar'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { AgenticPreset } from '@/hooks/use-presets'
@@ -127,9 +127,9 @@ export function ChatPanel({
   onSystemPromptChange,
 }: ChatPanelProps) {
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
-      <Card className="lg:col-span-2 bg-slate-800/30 border-slate-700/50 backdrop-blur-sm flex flex-col h-[600px]">
-        <CardHeader className="border-b border-slate-700/50 pb-4">
+    <div className="grid gap-6 lg:grid-cols-3 h-full">
+      <Card className="lg:col-span-2 bg-slate-800/30 border-slate-700/50 backdrop-blur-sm flex flex-col min-h-0 overflow-hidden">
+        <CardHeader className="border-b border-slate-700/50 pb-4 flex-shrink-0">
           <div className="flex justify-between items-start mb-2">
             <div>
               <CardTitle className="text-white">Agentic Control Space</CardTitle>
@@ -254,7 +254,7 @@ export function ChatPanel({
         />
       </Card>
 
-      <ChatSettings status={status} contextStrategy={contextStrategy} />
+      <AgenticToolbar />
     </div>
   )
 }

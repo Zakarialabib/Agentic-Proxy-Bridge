@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronUp, Sparkles, User, Terminal, Activity, RotateCcw, BrainCircuit, Minimize2 } from "lucide-react"
+import { ChevronDown, ChevronUp, Sparkles, User, Terminal, Activity, RotateCcw, BrainCircuit, Minimize2, GitBranch, Wrench } from "lucide-react"
 import { useState } from "react"
 import { ToolArtifact } from "./ToolArtifact"
 import ReactMarkdown from "react-markdown"
@@ -104,16 +104,37 @@ export function MessageBubble({ role, content, modelUsed, isLast, telemetry }: M
   )
 
   const renderToolBlocks = (text: string) => {
-    const parts = text.split(/(<tool_call>[\s\S]*?<\/tool_call>|<tool_response>[\s\S]*?<\/tool_response>)/g);
+    // Split the text, optionally capturing the markdown wrappers
+    const parts = text.split(/(?:```xml\s*)?(<tool_call>[\s\S]*?<\/tool_call>)(?:\s*```)?|(?:```json\s*\/\/ Tool Response:[^\n]*\n\s*)?(<tool_response>[\s\S]*?<\/tool_response>)(?:\s*```)?/g);
     
     return parts.map((part, index) => {
+      if (!part) return null;
       if (part.startsWith('<tool_call>')) {
         const innerContent = part.replace(/<\/?tool_call>/g, '').trim();
         let toolName = 'Unknown Tool';
         try {
+          // First try JSON parse
           const parsed = JSON.parse(innerContent);
           toolName = parsed.name || toolName;
-        } catch(e) {}
+        } catch(e) {
+          // Fallback to XML parsing - strip leading/trailing whitespace first
+          const cleanedContent = innerContent.trim();
+          // Use [\s\S] instead of . for multi-line content (equivalent to dotAll)
+          let nameMatch = cleanedContent.match(/<name>\s*([\s\S]*?)\s*<\/name>/i);
+          if (!nameMatch) {
+            // Try alternate pattern - look for name tag anywhere in content
+            nameMatch = cleanedContent.match(/<name>([^<]+)<\/name>/i);
+          }
+          if (nameMatch) {
+            toolName = nameMatch[1].trim();
+          } else {
+            // Last resort: look for any word before <arguments>
+            const argsMatch = cleanedContent.match(/^(\w+)\s*<arguments>/i);
+            if (argsMatch) {
+              toolName = argsMatch[1].trim();
+            }
+          }
+        }
         return <ToolArtifact key={index} toolName={toolName} toolContent={innerContent} isCall={true} />
       }
       if (part.startsWith('<tool_response>')) {
@@ -124,7 +145,25 @@ export function MessageBubble({ role, content, modelUsed, isLast, telemetry }: M
           const parsed = JSON.parse(innerContent);
           toolName = parsed.name || toolName;
           actualContent = typeof parsed.content === 'string' ? parsed.content : JSON.stringify(parsed.content, null, 2);
-        } catch(e) {}
+        } catch(e) {
+          // Fallback to XML parsing for response
+          const cleanedContent = innerContent.trim();
+          let nameMatch = cleanedContent.match(/<name>\s*([\s\S]*?)\s*<\/name>/i);
+          if (!nameMatch) {
+            nameMatch = cleanedContent.match(/<name>([^<]+)<\/name>/i);
+          }
+          if (nameMatch) {
+            toolName = nameMatch[1].trim();
+          }
+          // Also try to extract content from XML
+          let contentMatch = cleanedContent.match(/<content>([\s\S]*?)<\/content>/i);
+          if (!contentMatch) {
+            contentMatch = cleanedContent.match(/<content>([^<]+)<\/content>/i);
+          }
+          if (contentMatch) {
+            actualContent = contentMatch[1].trim();
+          }
+        }
         return <ToolArtifact key={index} toolName={toolName} toolContent={actualContent} isCall={false} />
       }
       
@@ -194,21 +233,35 @@ export function MessageBubble({ role, content, modelUsed, isLast, telemetry }: M
             <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
               <Activity className="w-3 h-3" /> Agentic Telemetry
             </div>
-            {telemetry.map((t, idx) => (
-              <div key={idx} className="flex items-start gap-2 text-xs">
-                {t.event === 'mode_switch' && <BrainCircuit className="w-3.5 h-3.5 text-cyan-400 mt-0.5 flex-shrink-0" />}
-                {t.event === 'rollback' && <RotateCcw className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />}
-                {t.event === 'compression' && <Minimize2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />}
-                {t.event === 'breadcrumb' && <Terminal className="w-3.5 h-3.5 text-purple-400 mt-0.5 flex-shrink-0" />}
-                <span className={cn(
-                  "flex-1",
-                  t.event === 'rollback' ? "text-amber-300" :
-                  t.event === 'mode_switch' ? "text-cyan-300" :
-                  t.event === 'compression' ? "text-emerald-300" :
-                  "text-slate-300"
-                )}>{t.details}</span>
-              </div>
-            ))}
+            {telemetry.map((t, idx) => {
+              let details = t.details;
+              try {
+                const parsed = JSON.parse(t.details);
+                if (t.event === 'tool_start') details = `Executing ${parsed.name}...`;
+                if (t.event === 'tool_complete') details = `Finished ${parsed.name} (${parsed.duration_ms}ms)`;
+                if (t.event === 'tool_error') details = `Error in ${parsed.name}: ${parsed.error}`;
+                if (t.event === 'hop') details = `Hop ${parsed.number} | Budget: ${parsed.budget}`;
+              } catch (e) {}
+
+              return (
+                <div key={idx} className="flex items-start gap-2 text-xs">
+                  {t.event === 'mode_switch' && <BrainCircuit className="w-3.5 h-3.5 text-cyan-400 mt-0.5 flex-shrink-0" />}
+                  {t.event === 'rollback' && <RotateCcw className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />}
+                  {t.event === 'compression' && <Minimize2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />}
+                  {t.event === 'breadcrumb' && <Terminal className="w-3.5 h-3.5 text-purple-400 mt-0.5 flex-shrink-0" />}
+                  {(t.event === 'tool_start' || t.event === 'tool_complete' || t.event === 'tool_error') && <Wrench className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />}
+                  {t.event === 'hop' && <GitBranch className="w-3.5 h-3.5 text-blue-400 mt-0.5 flex-shrink-0" />}
+                  <span className={cn(
+                    "flex-1",
+                    t.event === 'rollback' || t.event === 'tool_error' ? "text-amber-300" :
+                    t.event === 'mode_switch' || t.event === 'tool_start' ? "text-cyan-300" :
+                    t.event === 'compression' || t.event === 'tool_complete' ? "text-emerald-300" :
+                    t.event === 'hop' ? "text-blue-300" :
+                    "text-slate-300"
+                  )}>{details}</span>
+                </div>
+              );
+            })}
           </div>
         )}
 

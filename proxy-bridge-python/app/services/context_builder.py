@@ -26,8 +26,9 @@ def enforce_context_window(messages: List[Dict[str, Any]], max_tokens: int = 160
     system_tokens = estimate_tokens(system_msg.get("content", "")) if system_msg else 0
     
     # Process from newest to oldest
-    # Increase safety buffer for local models and tool headroom
-    budget = max_tokens - system_tokens - 2000  
+    # Increase safety buffer for local models and tool headroom. 
+    # Use 3000 token headroom to ensure long multi-hop agent reasoning doesn't get cut off.
+    budget = max_tokens - system_tokens - 3000  
     if budget < 2000:
         # Guarantee at least some room for the user query, even if we have to squeeze
         budget = 2000
@@ -61,33 +62,10 @@ def enforce_context_window(messages: List[Dict[str, Any]], max_tokens: int = 160
     if dropped_count > 0:
         final_messages.append({
             "role": "system",
-            "content": f"[System Note: {dropped_count} older conversation turns were compressed to maintain tool context headroom.]"
+            "content": f"[System Note: {dropped_count} older conversation turns were evicted to maintain tool context headroom.]"
         })
         
-    # --- KV Cache Coalescing ---
-    # Coalesce older turns into a single <history> block to improve prefix caching
-    # Keep the last 2 messages (usually Assistant + User) intact
-    if len(retained_msgs) > 2:
-        history_msgs = retained_msgs[:-2]
-        recent_msgs = retained_msgs[-2:]
-        
-        history_text = "<history>\n"
-        for m in history_msgs:
-            role = m.get("role", "unknown").upper()
-            content = m.get("content", "")
-            if isinstance(content, list):
-                content = " ".join([c.get("text", "") for c in content if c.get("type") == "text"])
-            history_text += f"{role}: {content}\n"
-        history_text += "</history>"
-        
-        final_messages.append({
-            "role": "user",
-            "content": history_text
-        })
-        final_messages.extend(recent_msgs)
-    else:
-        final_messages.extend(retained_msgs)
-    # ---------------------------
+    final_messages.extend(retained_msgs)
         
     return final_messages
 

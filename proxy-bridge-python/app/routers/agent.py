@@ -9,6 +9,7 @@ from app.services.agent_service import (
     build_orchestration_system_prompt,
     intercept_and_execute_tools,
     prioritize_tools_for_mode,
+    normalize_system_prompt_and_tools,
 )
 from app.services.tool_service import tool_registry
 from app.services.context_builder import map_model_name
@@ -134,6 +135,13 @@ async def orchestrate_agent(request: AgentOrchestrateRequest):
     context_limit = chat_payload.pop("contextWindow", settings.MAX_CONTEXT_LENGTH or 16000)
     if not context_limit:
         context_limit = settings.MAX_CONTEXT_LENGTH or 16000
+    
+    # Normalize system prompt to index 0, strip timestamps, and serialize tools to XML
+    tools_list = chat_payload.get("tools")
+    chat_payload["messages"] = normalize_system_prompt_and_tools(chat_payload.get("messages", []), tools_list)
+    if "tools" in chat_payload:
+        del chat_payload["tools"]
+
     chat_payload["messages"] = await apply_context_strategy(
         chat_payload.get("messages", []),
         last_user_message or "",
@@ -242,7 +250,7 @@ async def orchestrate_agent(request: AgentOrchestrateRequest):
                 async for chunk in intercept_and_execute_tools(
                     chat_result,
                     intercept_payload,
-                    original_messages,
+                    chat_payload["messages"],
                     orchestration_mode=orchestration_mode,
                 ):
                     yield chunk

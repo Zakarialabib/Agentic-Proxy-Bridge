@@ -1,6 +1,9 @@
 import json
 import httpx
 import re
+import os
+import platform
+import datetime
 from typing import AsyncGenerator, List, Dict, Any, Optional
 from app.services.pool import connection_pool, ACTIVE_CONNECTIONS
 from app.services.tool_service import tool_registry
@@ -84,11 +87,20 @@ def _telemetry_bytes(event: str, details: str) -> bytes:
     return f"data: {json.dumps(payload)}\n\n".encode("utf-8")
 
 def _looks_like_tool_block(content: str) -> bool:
+    """Detect the START of a tool call block in streamed content.
+    Must be precise to avoid false positives on conversational text that
+    happens to mention XML tags."""
     if not content:
         return False
     if "<tool_call>" in content:
         return True
-    if "```" in content and ("\"name\"" in content or "\"arguments\"" in content or "{" in content):
+    # Only match <name> if it looks like a standalone XML tag at the
+    # beginning of the accumulated buffer (not inside prose)
+    stripped = content.strip()
+    if stripped.startswith("<tool_call") or stripped.startswith("<name>"):
+        return True
+    # Detect informal tool header that Qwen uses
+    if re.match(r'^\s*Using Tool:', content, re.MULTILINE):
         return True
     return False
 
@@ -101,6 +113,35 @@ def _classify_tool(tool: Dict[str, Any]) -> str:
     if any(token in name for token in ("mcp", "web_search", "knowledge", "file_", "read_file", "write_file", "calculate", "get_current_time", "search")):
         return "mcp"
     return "local"
+
+
+def normalize_system_prompt_and_tools(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    """Ensure system prompt/tools are static at index 0 and strip timestamps."""
+    system_contents = []
+    other_messages = []
+    
+    for msg in messages:
+        if msg.get("role") == "system":
+            content = str(msg.get("content", ""))
+            # Strip timestamps
+            content = re.sub(r"\[\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?\]", "", content)
+            content = re.sub(r"\[\d{1,2}/\d{1,2}/\d{2,4}[, ]+\d{1,2}:\d{2}:\d{2}(?:\s*[APap][Mm])?\]", "", content)
+            content = re.sub(r"\[\d{2}:\d{2}:\d{2}\]", "", content)
+            content = re.sub(r"\b\d{2}:\d{2}:\d{2}\b", "", content) # standalone time
+            system_contents.append(content.strip())
+        else:
+            other_messages.append(msg)
+            
+    base_system = "\n\n".join(system_contents).strip()
+    
+    if tools:
+        from app.services.tool_service import tools_to_xml
+        xml_tools = tools_to_xml(tools)
+        base_system = f"{base_system}\n\nAvailable Tools:\n{xml_tools}".strip()
+        
+    if base_system:
+        return [{"role": "system", "content": base_system}] + other_messages
+    return other_messages
 
 
 def build_orchestration_profile(mode: Optional[str]) -> Dict[str, Any]:
@@ -133,12 +174,31 @@ def prioritize_tools_for_mode(tools: List[Dict[str, Any]], mode: Optional[str]) 
 
 def build_orchestration_system_prompt(mode: Optional[str]) -> str:
     profile = build_orchestration_profile(mode)
-    tool_format = (
-        "Tool calls should use: <tool_call>{\"name\": \"tool_name\", \"arguments\": { ... }}</tool_call>. "
-        "If a client enforces code blocks, use: ```tool_name\\n{\"arguments\": { ... }}\\n```. "
-        "Do not invent file paths. If a path is unknown, call file_list first or ask the user."
+    
+    current_os = platform.system()
+    current_cwd = os.getcwd()
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    return (
+        f"<persona>\n{profile['system_prompt']}\n</persona>\n\n"
+        f"<environment>\n"
+        f"  <os>{current_os}</os>\n"
+        f"  <cwd>{current_cwd}</cwd>\n"
+        f"  <time>{current_time}</time>\n"
+        f"</environment>\n\n"
+        f"<rules>\n"
+        f"  1. Tool calls should use XML format:\n"
+        f"     <tool_call>\n"
+        f"       <name>tool_name</name>\n"
+        f"       <arguments>\n"
+        f"         <arg_name>value</arg_name>\n"
+        f"       </arguments>\n"
+        f"     </tool_call>\n"
+        f"  2. Do not invent file paths. If a path is unknown, call file_list first or ask the user.\n"
+        f"  3. You MUST wrap your reasoning in <thought>...</thought> blocks before calling tools or responding.\n"
+        f"  4. You MUST use <reflection>...</reflection> blocks to evaluate the results of tool calls and adjust your plan.\n"
+        f"</rules>"
     )
-    return f"{profile['system_prompt']}\n{tool_format}"
 
 async def _compress_tool_result(result_str: str, tool_name: str, model_id: str) -> str:
     """Active Compression Mode to summarize large tool results and prevent Amnesia."""
@@ -193,6 +253,10 @@ async def intercept_and_execute_tools(
     recursive_hops = 0
     profile = build_orchestration_profile(orchestration_mode)
     profile_max_steps = int(profile.get("max_steps") or MAX_REACT_STEPS)
+    
+    # Use a single stable ID for the entire SSE stream to maintain compatibility with standard OpenAI clients
+    import time
+    session_data_id = f"chatcmpl-agent-{int(time.time()*1000)}"
 
     try:
         requested_max_steps = original_payload.get("max_steps")
@@ -218,27 +282,14 @@ async def intercept_and_execute_tools(
     from app.services.context_manager import context_controller
 
     while recursive_hops < max_react_steps:
-        # --- Cognitive Mode Switch (Predictive Unloading) ---
-        is_router_mode = (recursive_hops < 2)
-        cognitive_mode = "router" if is_router_mode else "reasoning"
-        
-        # Before each hop, adjust context based on accumulated tool payload
-        tool_results_size = sum(
-            len(_content_to_text(msg.get("content", "")))
-            for msg in current_messages
-            if msg.get("role") == "user" and "<tool_response>" in _content_to_text(msg.get("content", ""))
-        )
-        await context_controller.adjust_for_trajectory(
-            recursive_hops,
-            tool_results_size,
-            cognitive_mode,
-            model_id=original_payload.get("model"),
-        )
-        # ----------------------------------------------------
-
         recursive_hops += 1
         is_tool_call_mode = False
         tool_call_buffer = ""
+        assistant_content = ""
+        finish_reason = None
+        last_data_id = session_data_id
+        last_created = 0
+        last_model = original_payload.get("model", "")
         buffer = ""
         
         try:
@@ -260,25 +311,66 @@ async def intercept_and_execute_tools(
                         continue
                     
                     if line.strip() == "data: [DONE]":
-                        if not is_tool_call_mode:
-                            yield (line + "\n\n").encode("utf-8")
                         continue
                         
                     data_str = line[6:]
                     try:
                         data = json.loads(data_str)
                         content = ""
-                        # Standard OpenAI Delta format
-                        if data.get("choices") and data["choices"][0].get("delta", {}).get("content"):
-                            content = data["choices"][0]["delta"]["content"]
-                            
+                        last_data_id = data.get("id", last_data_id)
+                        last_created = data.get("created", last_created)
+                        last_model = data.get("model", last_model)
+                        
+                        choices = data.get("choices", [])
+                        if choices:
+                            delta = choices[0].get("delta", {})
+                            if delta.get("content"):
+                                content = delta["content"]
+                            if choices[0].get("finish_reason"):
+                                finish_reason = choices[0]["finish_reason"]
+                                
                         if content:
                             if _looks_like_tool_block(content) or _looks_like_tool_block(tool_call_buffer):
                                 is_tool_call_mode = True
                             
                             if is_tool_call_mode:
+                                is_first_tool_chunk = (len(tool_call_buffer) == 0)
                                 tool_call_buffer += content
+                                
+                                if is_first_tool_chunk:
+                                    # Inject markdown code block start so standard clients render the XML visibly
+                                    prefix_chunk = {
+                                        "id": last_data_id,
+                                        "object": "chat.completion.chunk",
+                                        "created": last_created,
+                                        "model": last_model,
+                                        "choices": [{"index": 0, "delta": {"content": "\n```xml\n"}, "finish_reason": None}]
+                                    }
+                                    yield f"data: {json.dumps(prefix_chunk)}\n\n".encode("utf-8")
+                                    
+                                # Stream the XML tool call as text content
+                                msg_chunk = {
+                                    "id": last_data_id,
+                                    "object": "chat.completion.chunk",
+                                    "created": last_created,
+                                    "model": last_model,
+                                    "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}]
+                                }
+                                yield f"data: {json.dumps(msg_chunk)}\n\n".encode("utf-8")
+
+                                if "</tool_call>" in tool_call_buffer:
+                                    # Close the markdown code block
+                                    suffix_chunk = {
+                                        "id": last_data_id,
+                                        "object": "chat.completion.chunk",
+                                        "created": last_created,
+                                        "model": last_model,
+                                        "choices": [{"index": 0, "delta": {"content": "\n```\n"}, "finish_reason": None}]
+                                    }
+                                    yield f"data: {json.dumps(suffix_chunk)}\n\n".encode("utf-8")
+                                    break
                             else:
+                                assistant_content += content
                                 yield (line + "\n\n").encode("utf-8")
                         else:
                             if not is_tool_call_mode:
@@ -286,10 +378,80 @@ async def intercept_and_execute_tools(
                     except Exception:
                         if not is_tool_call_mode:
                             yield (line + "\n\n").encode("utf-8")
+                
+                if is_tool_call_mode and "</tool_call>" in tool_call_buffer:
+                    break
             
             # Close the current response once processing finished
-            await current_response.aclose()
+            try:
+                await current_response.aclose()
+            except Exception:
+                pass
             ACTIVE_CONNECTIONS.dec()
+            
+            # --- False-positive tool mode recovery ---
+            # If tool_call_mode was set but the buffer doesn't contain anything
+            # that looks like a real tool call, it was a false positive.
+            # Flush the buffered content as normal text and reset.
+            if is_tool_call_mode and "</tool_call>" not in tool_call_buffer:
+                # Check if validator can actually parse anything useful
+                _fp_valid, _fp_data, _ = validator.validate_tool_call(tool_call_buffer)
+                if not _fp_valid or not (_fp_data and _fp_data.get("name")):
+                    # False positive — flush buffered content as normal text
+                    print(f"[Agentic Bridge] False-positive tool detection recovered. Flushing {len(tool_call_buffer)} chars as text.")
+                    flush_chunk = {
+                        "id": last_data_id,
+                        "object": "chat.completion.chunk",
+                        "created": last_created,
+                        "model": last_model,
+                        "choices": [{"index": 0, "delta": {"content": tool_call_buffer}, "finish_reason": None}]
+                    }
+                    yield f"data: {json.dumps(flush_chunk)}\n\n".encode("utf-8")
+                    assistant_content += tool_call_buffer
+                    is_tool_call_mode = False
+                    tool_call_buffer = ""
+                else:
+                    # Real tool call that's just missing its closing tag
+                    suffix_chunk = {
+                        "id": last_data_id,
+                        "object": "chat.completion.chunk",
+                        "created": last_created,
+                        "model": last_model,
+                        "choices": [{"index": 0, "delta": {"content": "\n```\n"}, "finish_reason": None}]
+                    }
+                    yield f"data: {json.dumps(suffix_chunk)}\n\n".encode("utf-8")
+            
+            # --- Auto-continue on max_tokens exhaustion ---
+            if finish_reason == "length" and not is_tool_call_mode:
+                yield _telemetry_bytes("auto_continue", "Token limit reached. Automatically continuing generation...")
+                
+                # Combine all generated content so far
+                full_content = assistant_content
+                current_messages.append({"role": "assistant", "content": full_content})
+                current_messages.append({"role": "user", "content": "[SYSTEM: Your response was cut off by the token limit. Continue exactly where you left off. Do not repeat anything you already said.]"})
+                
+                from app.services.context_builder import enforce_context_window
+                max_tokens = original_payload.get("max_tokens") or 8192
+                current_goal = ""
+                strategy = original_payload.get("context_strategy") or "full"
+                current_messages = await apply_context_strategy(current_messages, current_goal, strategy, max_tokens)
+                follow_up_payload = {**original_payload, "messages": enforce_context_window(current_messages, max_tokens)}
+                
+                client = connection_pool.get_client("openai")
+                headers = {"Content-Type": "application/json"}
+                timeout = httpx.Timeout(300.0, connect=10.0)
+                req = client.build_request(
+                    "POST", 
+                    f"{settings.lm_studio_base_url}/v1/chat/completions",
+                    json=follow_up_payload,
+                    headers=headers,
+                    timeout=timeout
+                )
+                next_response = await client.send(req, stream=True)
+                next_response.raise_for_status()
+                current_response = next_response
+                continue
+                
             if is_tool_call_mode:
                 # NeMo-Style Guardrail Validation
                 is_valid, tool_data, parse_error = validator.validate_tool_call(tool_call_buffer)
@@ -320,8 +482,26 @@ async def intercept_and_execute_tools(
                     args = tool_data.get("arguments") or tool_data.get("parameters") or {}
                     tool_call_content = re.sub(r"```[a-zA-Z0-9_-]*\n", "", tool_call_content).replace("```", "").strip()
                     
+                    if tool_name == "ask_user_question":
+                        question = args.get("question", "")
+                        # Yield the question directly to the user as content
+                        msg_chunk = {
+                            "id": last_data_id,
+                            "object": "chat.completion.chunk",
+                            "created": last_created,
+                            "model": last_model,
+                            "choices": [{"index": 0, "delta": {"content": f"\n\n[Question to User]: {question}"}, "finish_reason": "stop"}]
+                        }
+                        yield f"data: {json.dumps(msg_chunk)}\n\n".encode("utf-8")
+                        yield _telemetry_bytes("ask_user_question", f"Agent paused to ask user: {question}")
+                        break
+
                     # Execution
+                    yield _telemetry_bytes("tool_start", json.dumps({"name": tool_name, "arguments": args}))
+                    
+                    start_exec = time.time()
                     call_result = await tool_registry.execute(tool_name, args)
+                    duration_ms = int((time.time() - start_exec) * 1000)
                     tool_budget_remaining = max(0, tool_budget_remaining - 1)
                     
                     if call_result.success:
@@ -333,26 +513,44 @@ async def intercept_and_execute_tools(
                         if len(result_str) > 500 and recursive_hops >= 2:
                             model_id = original_payload.get("model", "qwen3.5-4b")
                             content_val = await _compress_tool_result(result_str, tool_name, model_id)
-                            telemetry = {"type": "telemetry", "event": "compression", "details": f"Compressed tool payload ({len(result_str)} chars) to prevent context pollution."}
-                            yield f"data: {json.dumps(telemetry)}\n\n".encode("utf-8")
+                            yield _telemetry_bytes("compression", f"Compressed tool payload ({len(result_str)} chars) to prevent context pollution.")
                         elif len(result_str) > 1500:
                             # Fallback truncation if not compressed
                             content_val = result_str[:1500] + f"\n\n... [ToolResult truncated. {len(result_str) - 1500} chars omitted to save context memory.]"
                         else:
                             content_val = result_str
                         # -------------------------------------------------------
+                        yield _telemetry_bytes("tool_complete", json.dumps({"name": tool_name, "status": "success", "duration_ms": duration_ms}))
                     else:
                         content_val = f"Error: {call_result.error}"
+                        yield _telemetry_bytes("tool_error", json.dumps({"name": tool_name, "error": call_result.error, "duration_ms": duration_ms}))
+                    
+                    tool_response_json = json.dumps({'name': tool_name, 'content': content_val})
+                    yield _telemetry_bytes("tool_result", tool_response_json)
+                    
+                    # Yield the tool response directly as markdown text for generic clients
+                    response_markdown = f"\n```json\n// Tool Response: {tool_name}\n<tool_response>\n{tool_response_json}\n</tool_response>\n```\n"
+                    msg_chunk = {
+                        "id": last_data_id,
+                        "object": "chat.completion.chunk",
+                        "created": last_created,
+                        "model": last_model,
+                        "choices": [{"index": 0, "delta": {"content": response_markdown}, "finish_reason": None}]
+                    }
+                    yield f"data: {json.dumps(msg_chunk)}\n\n".encode("utf-8")
                     
                     # Construct follow-up
                     current_messages.append({"role": "assistant", "content": tool_call_content})
                     current_messages.append({
                         "role": "user",
-                        "content": f"<tool_response>\n{json.dumps({'name': tool_name, 'content': content_val})}\n</tool_response>"
+                        "content": f"<tool_response>\n{tool_response_json}\n</tool_response>"
                     })
+                    
+                    # Also yield hop telemetry for UI tracking
+                    yield _telemetry_bytes("hop", json.dumps({"number": recursive_hops, "budget": tool_budget_remaining}))
                 else:
                     # JSON parsing failed or missing name, inject error and retry
-                    error_msg = parse_error or "Invalid tool call format. Expected JSON with a 'name' field."
+                    error_msg = parse_error or "Invalid tool call format. Expected XML format with a <name> field."
                     
                     # --- Warm Start KV Cache Strategy (Rollback Points) ---
                     # Do NOT append the hallucinated output or the error message to the context history.
@@ -368,14 +566,13 @@ async def intercept_and_execute_tools(
                         print("[Agentic Bridge] Reinjecting breadcrumb into system prompt due to failure.")
                     # ------------------------------
 
-                    # We inject a temporary system hint instead of appending a user message
-                    sys_msg_idx = next((i for i, m in enumerate(original_payload.get("messages", [])) if m["role"] == "system"), None)
-                    if sys_msg_idx is not None:
-                        base_sys = original_payload["messages"][sys_msg_idx]["content"]
-                        original_payload["messages"][sys_msg_idx]["content"] = base_sys + f"\n[SYSTEM HINT: Your previous attempt failed. {error_msg}.{reinject_str} Please use strict <tool_call> tags.]"
+                    # We inject a temporary hint instead of modifying the system prompt to maintain KV cache
+                    hint_msg = f"[SYSTEM HINT: Your previous attempt failed. {error_msg}.{reinject_str} Please use strict <tool_call> tags.]"
+                    current_messages.append({"role": "user", "content": hint_msg})
                     
                     # Force JSON mode on the next attempt to guarantee structural compliance
-                    original_payload["response_format"] = {"type": "json_object"}
+                    # original_payload["response_format"] = {"type": "json_object"}
+                    pass
                     
                 # Retry logic for both success (continue agent loop) and failure (fix JSON)
                 from app.services.context_builder import enforce_context_window
@@ -400,11 +597,13 @@ async def intercept_and_execute_tools(
                     # --- GBNF Grammar Injection ---
                     # Extract the intended tool name from the failed buffer
                     import re
-                    name_match = re.search(r'"name"\s*:\s*"([^"]+)"', tool_call_buffer)
+                    name_match = re.search(r'<(?:name|tool_name)>\s*([^<]+)\s*</(?:name|tool_name)>', tool_call_buffer)
+                    if not name_match:
+                        name_match = re.search(r'"name"\s*:\s*"([^"]+)"', tool_call_buffer)
                     if name_match:
-                        intended_tool_name = name_match.group(1)
-                        # Find the schema for the intended tool in the original payload
-                        available_tools = original_payload.get("tools", [])
+                        intended_tool_name = name_match.group(1).strip()
+                        # Find the schema for the intended tool
+                        available_tools = original_payload.get("tools") or tool_registry.list_tools()
                         expected_tool = None
                         for t in available_tools:
                             if t.get("function", {}).get("name") == intended_tool_name:
@@ -435,22 +634,22 @@ async def intercept_and_execute_tools(
                 # Reasoning Mode: Deep thought (Hop 2+)
                 is_router_mode = (recursive_hops < 2)
                 
-                sys_msg_idx = next((i for i, m in enumerate(follow_up_payload["messages"]) if m["role"] == "system"), None)
-                if sys_msg_idx is not None:
-                    base_sys = follow_up_payload["messages"][sys_msg_idx]["content"]
-                    # Strip previous mode instructions
-                    base_sys = re.sub(r"\[COGNITIVE MODE: .*?\]\n", "", base_sys)
-                    
-                    if is_router_mode:
-                        follow_up_payload["messages"][sys_msg_idx]["content"] = "[COGNITIVE MODE: ROUTER]\nPick exactly one tool to use next. Do not provide any explanations or <think> blocks. Output only the tool call.\n" + base_sys
-                        follow_up_payload["max_tokens"] = min(follow_up_payload.get("max_tokens", 2048), 512)
-                        print(f"[Agentic Bridge] Switching to ROUTER MODE (Hop {recursive_hops})")
-                        yield _telemetry_bytes("mode_switch", f"Hop {recursive_hops}: Switching to ROUTER MODE. Freezing deep layers to save VRAM.")
-                    else:
-                        follow_up_payload["messages"][sys_msg_idx]["content"] = "[COGNITIVE MODE: REASONING]\nThink step-by-step using <think> blocks before acting. Evaluate the previous tool results carefully.\n" + base_sys
-                        follow_up_payload["max_tokens"] = max(follow_up_payload.get("max_tokens", 2048), 2048)
-                        print(f"[Agentic Bridge] Switching to REASONING MODE (Hop {recursive_hops})")
-                        yield _telemetry_bytes("mode_switch", f"Hop {recursive_hops}: Switching to REASONING MODE. Thawing deep layers for complex thought.")
+                if is_router_mode:
+                    follow_up_payload["messages"].append({
+                        "role": "user",
+                        "content": "[COGNITIVE MODE: ROUTER]\nPick exactly one tool to use next. Do not provide any explanations or <think> blocks. Output only the tool call."
+                    })
+                    follow_up_payload["max_tokens"] = min(follow_up_payload.get("max_tokens", 2048), 512)
+                    print(f"[Agentic Bridge] Switching to ROUTER MODE (Hop {recursive_hops})")
+                    yield _telemetry_bytes("mode_switch", f"Hop {recursive_hops}: Switching to ROUTER MODE. Freezing deep layers to save VRAM.")
+                else:
+                    follow_up_payload["messages"].append({
+                        "role": "user",
+                        "content": "[COGNITIVE MODE: REASONING]\nThink step-by-step using <think> blocks before acting. Evaluate the previous tool results carefully."
+                    })
+                    follow_up_payload["max_tokens"] = max(follow_up_payload.get("max_tokens", 2048), 2048)
+                    print(f"[Agentic Bridge] Switching to REASONING MODE (Hop {recursive_hops})")
+                    yield _telemetry_bytes("mode_switch", f"Hop {recursive_hops}: Switching to REASONING MODE. Thawing deep layers for complex thought.")
                 # -----------------------------
 
                 if tool_budget_remaining <= 0:
@@ -463,11 +662,15 @@ async def intercept_and_execute_tools(
                 client = connection_pool.get_client("openai")
                 headers = {"Content-Type": "application/json"}
                 
+                # Apply custom timeout specifically for generation to prevent 60s cutoff
+                timeout = httpx.Timeout(300.0, connect=10.0)
+                
                 req = client.build_request(
                     "POST", 
                     f"{settings.lm_studio_base_url}/v1/chat/completions",
                     json=follow_up_payload,
-                    headers=headers
+                    headers=headers,
+                    timeout=timeout
                 )
                 next_response = await client.send(req, stream=True)
                 next_response.raise_for_status()
@@ -481,4 +684,6 @@ async def intercept_and_execute_tools(
             ACTIVE_CONNECTIONS.dec()
             yield f'data: {{"error": "{str(e)}"}}\n\n'.encode("utf-8")
             break
+            
+    yield b"data: [DONE]\n\n"
 

@@ -441,6 +441,7 @@ export default function App() {
             toolCalls: (m as any).toolCalls,
             toolResults: (m as any).toolResults,
             contextSources: (m as any).contextSources,
+            telemetry: (m as any).telemetry,
           }))}
           isLoading={chatStore.isLoading}
           currentModel={chatStore.selectedModel || null}

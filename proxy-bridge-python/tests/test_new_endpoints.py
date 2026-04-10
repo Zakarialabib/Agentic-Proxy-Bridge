@@ -1,9 +1,11 @@
+import pytest
 import httpx
 import asyncio
 import json
 
 BASE_URL = "http://localhost:3001"
 
+@pytest.mark.asyncio
 async def test_endpoints():
     async with httpx.AsyncClient(timeout=10.0) as client:
         print("Testing /status...")

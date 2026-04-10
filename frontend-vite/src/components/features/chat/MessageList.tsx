@@ -25,7 +25,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
   }, [messages, isLoading])
 
   return (
-    <ScrollArea ref={scrollRef} className="flex-1 p-4 md:p-6 bg-slate-900/10">
+    <ScrollArea ref={scrollRef} className="flex-1 min-h-0 p-4 md:p-6 bg-slate-900/10 overflow-hidden">
       {messages.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full text-slate-500 opacity-50 space-y-4">
           <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center border border-slate-700/50">
