@@ -39,7 +39,7 @@ export function AutoConfigTuner({ model, isOpen, onClose, onApply }: AutoConfigT
       // Fetch hardware profile AND initial preset recommendation
       Promise.all([
         api.fetchHardwareProfile(),
-        api.generatePreset(model.modelKey, 'chat')
+        api.generatePreset(model.modelKey, model.type)
       ]).then(([hw, preset]) => {
         if (hw) setHardware(hw)
         if (preset) {
@@ -47,7 +47,8 @@ export function AutoConfigTuner({ model, isOpen, onClose, onApply }: AutoConfigT
           
           // Set initial slider values from the preset
           const offload = Number(preset.params?.gpu_offload || 0)
-          setGpuLayers(offload === 1.0 ? -1 : Math.floor(32 * offload))
+          const baseLayers = model.type === 'embedding' ? 24 : 32
+          setGpuLayers(offload === 1.0 ? -1 : Math.floor(baseLayers * offload))
           setContextLength(Number(preset.params?.context_window || 2048))
           setQuantization(String(preset.params?.quantization_target || 'Q4_K_M'))
         }
@@ -112,7 +113,8 @@ export function AutoConfigTuner({ model, isOpen, onClose, onApply }: AutoConfigT
         // Update sliders with tuned values
         if (tuned) {
           const offload = tuned.params?.gpu_offload || 0
-          setGpuLayers(offload === 1.0 ? -1 : Math.floor(32 * offload))
+          const baseLayers = model.type === 'embedding' ? 24 : 32
+          setGpuLayers(offload === 1.0 ? -1 : Math.floor(baseLayers * offload))
           setContextLength(tuned.params?.context_window || 2048)
           setQuantization(tuned.params?.quantization_target || 'Q4_K_M')
         }

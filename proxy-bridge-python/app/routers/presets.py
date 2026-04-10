@@ -35,6 +35,7 @@ def _save_presets_store() -> None:
 class PresetCreate(BaseModel):
     name: str
     model_id: str
+    type: Optional[str] = "llm"
     params: Dict[str, Any] = {}
     system_prompt: Optional[str] = None
     description: Optional[str] = None
@@ -121,7 +122,8 @@ async def generate_preset(req: PresetCreate):
     from app.services.preset_sync import generate_lmstudio_preset, sync_to_lmstudio
     
     try:
-        preset = tuner.generate_initial_preset(req.model_id)
+        is_embedding = req.type == "embedding"
+        preset = tuner.generate_initial_preset(req.model_id, is_embedding=is_embedding)
         preset["name"] = req.name # Override name with user's choice
         
         # --- Native LM Studio Preset Sync ---
