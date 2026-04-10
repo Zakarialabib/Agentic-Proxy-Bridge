@@ -239,41 +239,17 @@ def register_builtin_tools():
             raise ValueError(f"Access to path '{path}' is denied. Must be within /workspace")
         return abs_path
 
-    async def _search_markdown_docs(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        docs_dir = "/workspace/docs"
-        results = []
-        if not os.path.exists(docs_dir):
-            return results
-            
-        for root, _, files in os.walk(docs_dir):
-            for file in files:
-                if file.endswith(".md"):
-                    path = os.path.join(root, file)
-                    try:
-                        with open(path, "r", encoding="utf-8") as f:
-                            content = f.read()
-                            if query.lower() in content.lower():
-                                index = content.lower().find(query.lower())
-                                start = max(0, index - 100)
-                                end = min(len(content), index + len(query) + 100)
-                                snippet = content[start:end].strip()
-                                results.append({
-                                    "file": path,
-                                    "snippet": f"...{snippet}..."
-                                })
-                    except Exception:
-                        pass
-        return results[:top_k]
+    from app.tools.knowledge import semantic_search_docs
 
     async def search_knowledge_base(query: str, top_k: int = 5) -> Dict[str, Any]:
         """Search the knowledge base for information."""
-        results = await _search_markdown_docs(query, top_k)
+        results = await semantic_search_docs(query, top_k=top_k)
         return {
             "status": "success",
             "query": query,
             "top_k": top_k,
             "results": results,
-            "message": f"Found {len(results)} results" if results else "No results found",
+            "message": "Semantic search completed",
         }
 
     async def calculate(expression: str) -> Dict[str, Any]:
@@ -356,10 +332,10 @@ def register_builtin_tools():
 
     async def query_knowledge_graph(query: str) -> Dict[str, Any]:
         """Query the knowledge graph for information."""
-        results = await _search_markdown_docs(query, 5)
+        results = await semantic_search_docs(query, top_k=5)
         return {
             "status": "success",
-            "content": results if results else "No matching nodes found."
+            "content": results
         }
 
     async def ask_user_question(question: str) -> Dict[str, Any]:
