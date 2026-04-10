@@ -132,6 +132,12 @@ export function MessageBubble({ role, content, modelUsed, isLast, telemetry }: M
             const argsMatch = cleanedContent.match(/^(\w+)\s*<arguments>/i);
             if (argsMatch) {
               toolName = argsMatch[1].trim();
+            } else {
+              // Direct tag style: <file_list>...</file_list>
+              const directTagMatch = cleanedContent.match(/^<([a-zA-Z0-9_-]+)>/);
+              if (directTagMatch && !['name', 'arguments'].includes(directTagMatch[1].toLowerCase())) {
+                toolName = directTagMatch[1].trim();
+              }
             }
           }
         }

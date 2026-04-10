@@ -67,6 +67,19 @@ class JsonGuardrail:
                     tool_name = inline_match.group(1).strip()
                     return True, {"name": tool_name, "arguments": {}}, None
                 
+                # Try direct tag Anthropic/Cursor style: <tool_call><tool_name><param>value</param></tool_name></tool_call>
+                direct_tag_match = re.search(r'<tool_call>\s*<([a-zA-Z0-9_-]+)>', content, re.IGNORECASE)
+                if direct_tag_match:
+                    tool_name = direct_tag_match.group(1).strip()
+                    if tool_name not in ('name', 'arguments'):
+                        args = {}
+                        inner_content_match = re.search(f"<{tool_name}>(.*?)</{tool_name}>", content, re.DOTALL | re.IGNORECASE)
+                        if inner_content_match:
+                            inner_content = inner_content_match.group(1).strip()
+                            for arg_match in re.finditer(r"<([^>]+)>\s*(.*?)\s*</\1>", inner_content, re.DOTALL):
+                                args[arg_match.group(1).strip()] = arg_match.group(2).strip()
+                        return True, {"name": tool_name, "arguments": args}, None
+                
                 # Last resort: look for ANY word followed by <arguments> at top level
                 # This handles <name>tool_name</arguments> which is malformed but contains both
                 desperate_match = re.search(r"<name>\s*(\w+)\s*</arguments>", content, re.DOTALL | re.IGNORECASE)
