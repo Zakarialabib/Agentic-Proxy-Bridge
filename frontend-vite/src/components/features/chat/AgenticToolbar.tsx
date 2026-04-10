@@ -12,6 +12,7 @@ import { useEffect } from 'react'
 import { cn } from '@/lib/utils'
 
 export function AgenticToolbar() {
+  const status = useChatStore((s: any) => s.status)
   const { 
     availableTools, 
     enabledTools, 
@@ -193,7 +194,7 @@ export function AgenticToolbar() {
               <Slider 
                 value={[maxSteps]} 
                 min={1} 
-                max={10} 
+                max={status?.active_engine === 'vllm' ? 20 : 10} 
                 step={1} 
                 onValueChange={([v]) => setParams({ maxSteps: v })}
                 className="[&_.relative]:bg-slate-700 [&_.absolute]:bg-cyan-500"
@@ -238,6 +239,12 @@ export function AgenticToolbar() {
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-2">
+          {status?.active_engine === 'vllm' && (
+            <div className="flex justify-between text-[11px] items-center text-slate-400">
+              <span className="flex items-center gap-1.5"><Zap className="w-3 h-3 text-amber-400" /> Engine</span>
+              <Badge variant="outline" className="h-5 text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20">vLLM</Badge>
+            </div>
+          )}
           <div className="flex justify-between text-[11px] items-center text-slate-400">
             <span className="flex items-center gap-1.5"><Network className="w-3 h-3 text-cyan-400" /> MCP Status</span>
             <Badge variant="outline" className="h-5 text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">Synced</Badge>

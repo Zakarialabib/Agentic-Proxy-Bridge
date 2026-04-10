@@ -116,15 +116,16 @@ app.include_router(ace_router, prefix="/api/ace", tags=["ACE"])
 @app.get("/health")
 async def health_check():
     """Check bridge and LM Studio connectivity."""
+    from app.core.settings import settings
     health = {
         "status": "ok",
         "bridge": "running",
         "lmstudio": "unknown",
         "uptime_seconds": round(time.time() - START_TIME, 1),
+        "active_engine": settings.ACTIVE_BACKEND,
     }
     try:
         from app.adapters import get_active_adapter
-        from app.core.settings import settings
 
         adapter = get_active_adapter()
         await adapter.list_models()
@@ -157,6 +158,7 @@ async def frontend_status():
         "lmstudio_connected": lmstudio_connected,
         "tools_registered": 0,
         "approval_mode": settings.APPROVAL_MODE,
+        "active_engine": settings.ACTIVE_BACKEND,
         "active_sessions": 0,
         "documents_indexed": 0,
         "knowledge_graph": {"nodes": 0, "edges": 0, "documents": {"count": 0}},
@@ -286,6 +288,7 @@ async def system_status():
 
     status = {
         "status": "ok",
+        "active_engine": settings.ACTIVE_BACKEND,
         "uptime_seconds": round(time.time() - START_TIME, 1),
         "hardware": {},
         "models": {

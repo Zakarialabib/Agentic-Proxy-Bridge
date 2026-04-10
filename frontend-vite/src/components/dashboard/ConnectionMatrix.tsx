@@ -23,7 +23,9 @@ export function ConnectionMatrix({ status }: ConnectionMatrixProps) {
       <CardContent className="space-y-3">
         <div className="p-3 rounded-lg bg-slate-900/50 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400">LM Studio</span>
+            <span className="text-xs text-slate-400">
+              {status?.active_engine === 'vllm' ? 'vLLM' : 'LM Studio'}
+            </span>
             {status?.lmstudio_connected ? (
               <Badge className="bg-emerald-500/20 text-emerald-400 border-0 text-xs">Connected</Badge>
             ) : (
