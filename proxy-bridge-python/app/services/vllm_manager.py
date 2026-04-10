@@ -37,6 +37,11 @@ class VLLMManager:
                 "--port", "8000",
                 "--enable-prefix-caching"
             ]
+            
+            # Auto-detect GGUF and add necessary flag
+            if settings.VLLM_MODEL.lower().endswith(".gguf"):
+                cmd.extend(["--quantization", "gguf"])
+                
             self.process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,

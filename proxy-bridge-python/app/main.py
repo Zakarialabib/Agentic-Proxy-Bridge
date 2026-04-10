@@ -1,7 +1,12 @@
 import time
+import sys
+import asyncio
 from contextlib import asynccontextmanager
 
 import structlog
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
