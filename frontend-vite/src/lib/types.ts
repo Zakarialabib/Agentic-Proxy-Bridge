@@ -35,10 +35,13 @@ export interface KnowledgeNode {
 }
 
 export interface MCPServer {
+  id: string
   name: string
   transport: string
   tools_count: number
   health: string
+  status?: 'connected' | 'disconnected' | 'connecting' | 'error'
+  error?: string
 }
 
 export interface A2AAgent {

@@ -21,6 +21,12 @@ import {
   Network,
   Bot,
 } from 'lucide-react'
+import { Activity } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+// @ts-expect-error - No types for prism styles
+import { vscDarkPlus as syntaxStyle } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { ModelSelector } from './model-selector'
 import type { ModelInfo } from '@/lib/types'
 import type { LoadedModelInstance } from '@/hooks/use-models'
@@ -31,6 +37,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   modelUsed?: string
+  telemetry?: Array<{ event: string, details: string, timestamp: number }>
 }
 
 interface ModelPreset {
@@ -149,7 +156,46 @@ export function ChatInterface({
                         : 'bg-slate-700/50 text-white border border-slate-600'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    {msg.telemetry && msg.telemetry.length > 0 && (
+                      <div className="flex flex-col gap-1 mb-2">
+                        {msg.telemetry.map((t, idx) => (
+                          <div key={idx} className="flex items-start gap-1.5 text-[10px] text-cyan-400 bg-slate-900/50 px-2 py-1 rounded-md border border-cyan-900/30 w-fit max-w-full">
+                            <Activity className="w-3 h-3 mt-0.5 shrink-0" />
+                            <div className="flex flex-col overflow-hidden">
+                               <span className="font-mono text-cyan-300 font-semibold truncate">{t.event}</span>
+                               <span className="opacity-80 break-words line-clamp-3">{t.details}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="text-sm overflow-hidden prose prose-invert prose-sm max-w-none prose-pre:my-0 prose-p:leading-snug">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          code({node, inline, className, children, ...props}: any) {
+                            const match = /language-(\w+)/.exec(className || '')
+                            return !inline && match ? (
+                              <SyntaxHighlighter
+                                {...props}
+                                style={syntaxStyle as any}
+                                language={match[1]}
+                                PreTag="div"
+                                className="rounded-md border border-slate-600/50 !my-2 text-xs overflow-auto"
+                              >
+                                {String(children).replace(/\n$/, '')}
+                              </SyntaxHighlighter>
+                            ) : (
+                              <code className={`${className} bg-slate-800/80 px-1.5 py-0.5 rounded text-cyan-300 text-xs font-mono whitespace-pre-wrap break-all`} {...props}>
+                                {children}
+                              </code>
+                            )
+                          }
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
                     {msg.modelUsed && (
                       <div className="mt-2 text-xs opacity-70">
                         <span>Model: {msg.modelUsed}</span>

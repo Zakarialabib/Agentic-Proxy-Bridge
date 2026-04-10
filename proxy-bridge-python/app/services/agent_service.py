@@ -87,9 +87,20 @@ def _telemetry_bytes(event: str, details: str) -> bytes:
     return f"data: {json.dumps(payload)}\n\n".encode("utf-8")
 
 def _looks_like_tool_block(content: str) -> bool:
+    """Detect the START of a tool call block in streamed content.
+    Must be precise to avoid false positives on conversational text that
+    happens to mention XML tags."""
     if not content:
         return False
     if "<tool_call>" in content:
+        return True
+    # Only match <name> if it looks like a standalone XML tag at the
+    # beginning of the accumulated buffer (not inside prose)
+    stripped = content.strip()
+    if stripped.startswith("<tool_call") or stripped.startswith("<name>"):
+        return True
+    # Detect informal tool header that Qwen uses
+    if re.match(r'^\s*Using Tool:', content, re.MULTILINE):
         return True
     return False
 
@@ -378,10 +389,46 @@ async def intercept_and_execute_tools(
                 pass
             ACTIVE_CONNECTIONS.dec()
             
+            # --- False-positive tool mode recovery ---
+            # If tool_call_mode was set but the buffer doesn't contain anything
+            # that looks like a real tool call, it was a false positive.
+            # Flush the buffered content as normal text and reset.
+            if is_tool_call_mode and "</tool_call>" not in tool_call_buffer:
+                # Check if validator can actually parse anything useful
+                _fp_valid, _fp_data, _ = validator.validate_tool_call(tool_call_buffer)
+                if not _fp_valid or not (_fp_data and _fp_data.get("name")):
+                    # False positive — flush buffered content as normal text
+                    print(f"[Agentic Bridge] False-positive tool detection recovered. Flushing {len(tool_call_buffer)} chars as text.")
+                    flush_chunk = {
+                        "id": last_data_id,
+                        "object": "chat.completion.chunk",
+                        "created": last_created,
+                        "model": last_model,
+                        "choices": [{"index": 0, "delta": {"content": tool_call_buffer}, "finish_reason": None}]
+                    }
+                    yield f"data: {json.dumps(flush_chunk)}\n\n".encode("utf-8")
+                    assistant_content += tool_call_buffer
+                    is_tool_call_mode = False
+                    tool_call_buffer = ""
+                else:
+                    # Real tool call that's just missing its closing tag
+                    suffix_chunk = {
+                        "id": last_data_id,
+                        "object": "chat.completion.chunk",
+                        "created": last_created,
+                        "model": last_model,
+                        "choices": [{"index": 0, "delta": {"content": "\n```\n"}, "finish_reason": None}]
+                    }
+                    yield f"data: {json.dumps(suffix_chunk)}\n\n".encode("utf-8")
+            
+            # --- Auto-continue on max_tokens exhaustion ---
             if finish_reason == "length" and not is_tool_call_mode:
-                yield _telemetry_bytes("auto_continue", "Context length reached. Automatically continuing generation...")
-                current_messages.append({"role": "assistant", "content": assistant_content})
-                current_messages.append({"role": "user", "content": "[SYSTEM: Context length reached. Please continue exactly where you left off.]"})
+                yield _telemetry_bytes("auto_continue", "Token limit reached. Automatically continuing generation...")
+                
+                # Combine all generated content so far
+                full_content = assistant_content
+                current_messages.append({"role": "assistant", "content": full_content})
+                current_messages.append({"role": "user", "content": "[SYSTEM: Your response was cut off by the token limit. Continue exactly where you left off. Do not repeat anything you already said.]"})
                 
                 from app.services.context_builder import enforce_context_window
                 max_tokens = original_payload.get("max_tokens") or 8192
@@ -450,7 +497,11 @@ async def intercept_and_execute_tools(
                         break
 
                     # Execution
+                    yield _telemetry_bytes("tool_start", json.dumps({"name": tool_name, "arguments": args}))
+                    
+                    start_exec = time.time()
                     call_result = await tool_registry.execute(tool_name, args)
+                    duration_ms = int((time.time() - start_exec) * 1000)
                     tool_budget_remaining = max(0, tool_budget_remaining - 1)
                     
                     if call_result.success:
@@ -462,16 +513,17 @@ async def intercept_and_execute_tools(
                         if len(result_str) > 500 and recursive_hops >= 2:
                             model_id = original_payload.get("model", "qwen3.5-4b")
                             content_val = await _compress_tool_result(result_str, tool_name, model_id)
-                            telemetry = {"type": "telemetry", "event": "compression", "details": f"Compressed tool payload ({len(result_str)} chars) to prevent context pollution."}
-                            yield f"data: {json.dumps(telemetry)}\n\n".encode("utf-8")
+                            yield _telemetry_bytes("compression", f"Compressed tool payload ({len(result_str)} chars) to prevent context pollution.")
                         elif len(result_str) > 1500:
                             # Fallback truncation if not compressed
                             content_val = result_str[:1500] + f"\n\n... [ToolResult truncated. {len(result_str) - 1500} chars omitted to save context memory.]"
                         else:
                             content_val = result_str
                         # -------------------------------------------------------
+                        yield _telemetry_bytes("tool_complete", json.dumps({"name": tool_name, "status": "success", "duration_ms": duration_ms}))
                     else:
                         content_val = f"Error: {call_result.error}"
+                        yield _telemetry_bytes("tool_error", json.dumps({"name": tool_name, "error": call_result.error, "duration_ms": duration_ms}))
                     
                     tool_response_json = json.dumps({'name': tool_name, 'content': content_val})
                     yield _telemetry_bytes("tool_result", tool_response_json)
@@ -493,6 +545,9 @@ async def intercept_and_execute_tools(
                         "role": "user",
                         "content": f"<tool_response>\n{tool_response_json}\n</tool_response>"
                     })
+                    
+                    # Also yield hop telemetry for UI tracking
+                    yield _telemetry_bytes("hop", json.dumps({"number": recursive_hops, "budget": tool_budget_remaining}))
                 else:
                     # JSON parsing failed or missing name, inject error and retry
                     error_msg = parse_error or "Invalid tool call format. Expected XML format with a <name> field."

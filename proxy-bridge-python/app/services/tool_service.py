@@ -16,6 +16,7 @@ class ToolDefinition:
     description: str
     parameters: Dict[str, Any]
     handler: Optional[Callable] = None
+    source: str = "builtin"
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -118,6 +119,7 @@ class ToolRegistry:
         return [
             {
                 "type": "function",
+                "source": tool.source,
                 "function": {
                     "name": tool.name,
                     "description": tool.description,

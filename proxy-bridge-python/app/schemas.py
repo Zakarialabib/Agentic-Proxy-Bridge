@@ -31,6 +31,28 @@ class ChatCompletionRequest(BaseModel):
         validation_alias=AliasChoices("contextWindow", "context_window"),
     )
     tools: Optional[List[Dict[str, Any]]] = None
+    
+    # Orchestration fields (used when tools provided)
+    orchestration_mode: Optional[str] = Field(
+        default=None,
+        description="Orchestration mode: adaptive, mcp_only, a2a_only, local_only. Auto-detected if not provided."
+    )
+    max_steps: Optional[int] = Field(
+        default=None,
+        description="Maximum ReAct loop iterations. Auto-configured based on orchestration mode if not set."
+    )
+    tool_budget: Optional[int] = Field(
+        default=None,
+        description="Maximum tool calls allowed. Auto-configured based on orchestration mode if not set."
+    )
+    context_strategy: Optional[str] = Field(
+        default=None,
+        description="Context strategy: full, balanced, minimal. Auto-detected based on task complexity."
+    )
+    thinking: Optional[bool] = Field(
+        default=None,
+        description="Enable Qwen3 thinking mode for reasoning tasks."
+    )
 
     class Config:
         populate_by_name = True
