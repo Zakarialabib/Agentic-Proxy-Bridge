@@ -128,15 +128,21 @@ export function MessageBubble({ role, content, modelUsed, isLast, telemetry }: M
           if (nameMatch) {
             toolName = nameMatch[1].trim();
           } else {
-            // Last resort: look for any word before <arguments>
-            const argsMatch = cleanedContent.match(/^(\w+)\s*<arguments>/i);
-            if (argsMatch) {
-              toolName = argsMatch[1].trim();
+            // Try malformed tags like <name=tool_name> or <name=tool_name</name>
+            const malformedMatch = cleanedContent.match(/<name\s*=\s*([a-zA-Z0-9_-]+)/i);
+            if (malformedMatch) {
+              toolName = malformedMatch[1].trim();
             } else {
-              // Direct tag style: <file_list>...</file_list>
-              const directTagMatch = cleanedContent.match(/^<([a-zA-Z0-9_-]+)>/);
-              if (directTagMatch && !['name', 'arguments'].includes(directTagMatch[1].toLowerCase())) {
-                toolName = directTagMatch[1].trim();
+              // Last resort: look for any word before <arguments>
+              const argsMatch = cleanedContent.match(/^(\w+)\s*<arguments>/i);
+              if (argsMatch) {
+                toolName = argsMatch[1].trim();
+              } else {
+                // Direct tag style: <file_list>...</file_list>
+                const directTagMatch = cleanedContent.match(/^<([a-zA-Z0-9_-]+)>/);
+                if (directTagMatch && !['name', 'arguments'].includes(directTagMatch[1].toLowerCase())) {
+                  toolName = directTagMatch[1].trim();
+                }
               }
             }
           }
@@ -160,6 +166,11 @@ export function MessageBubble({ role, content, modelUsed, isLast, telemetry }: M
           }
           if (nameMatch) {
             toolName = nameMatch[1].trim();
+          } else {
+            const malformedMatch = cleanedContent.match(/<name\s*=\s*([a-zA-Z0-9_-]+)/i);
+            if (malformedMatch) {
+              toolName = malformedMatch[1].trim();
+            }
           }
           // Also try to extract content from XML
           let contentMatch = cleanedContent.match(/<content>([\s\S]*?)<\/content>/i);

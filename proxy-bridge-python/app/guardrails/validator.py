@@ -47,13 +47,17 @@ class JsonGuardrail:
                 name_match = re.search(r"<name>\s*(\w+)\s*<arguments>", content, re.DOTALL | re.IGNORECASE)
             
             if not name_match:
-                # Try JSON-style: "name": "toolname"
-                json_name_match = re.search(r'"name"\s*:\s*"([^"]+)"', content)
+                # Try malformed tags like <name=tool_name</name> or <name=tool_name>
+                name_match = re.search(r"<name\s*=\s*([a-zA-Z0-9_-]+)", content, re.IGNORECASE)
+            
+            if not name_match:
+                # Try JSON-style: "name": "toolname" or name: toolname
+                json_name_match = re.search(r'"?name"?\s*:\s*"?([a-zA-Z0-9_-]+)"?', content)
                 if json_name_match:
                     tool_name = json_name_match.group(1).strip()
                     if tool_name:
                         args = {}
-                        json_args_match = re.search(r'"arguments"\s*:\s*(\{[^}]*\})', content)
+                        json_args_match = re.search(r'"?arguments"?\s*:\s*(\{[^}]*\})', content)
                         if json_args_match:
                             try:
                                 args = json.loads(json_args_match.group(1))
@@ -92,7 +96,7 @@ class JsonGuardrail:
             tool_name = name_match.group(1).strip()
             
             if not tool_name:
-                json_name_match = re.search(r'"name"\s*:\s*"([^"]+)"', content)
+                json_name_match = re.search(r'"?name"?\s*:\s*"?([a-zA-Z0-9_-]+)"?', content)
                 if json_name_match:
                     tool_name = json_name_match.group(1).strip()
                 else:
@@ -102,7 +106,7 @@ class JsonGuardrail:
             args_match = re.search(r"<arguments>\s*(.*?)\s*</arguments>", content, re.DOTALL)
             if not args_match:
                 # Try JSON arguments inside XML
-                json_args_match = re.search(r'"arguments"\s*:\s*(\{[^}]*\})', content)
+                json_args_match = re.search(r'"?arguments"?\s*:\s*(\{[^}]*\})', content)
                 if json_args_match:
                     try:
                         args = json.loads(json_args_match.group(1))

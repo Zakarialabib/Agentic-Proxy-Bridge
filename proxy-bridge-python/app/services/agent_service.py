@@ -97,10 +97,10 @@ def _looks_like_tool_block(content: str) -> bool:
     # Only match <name> if it looks like a standalone XML tag at the
     # beginning of the accumulated buffer (not inside prose)
     stripped = content.strip()
-    if stripped.startswith("<tool_call") or stripped.startswith("<name>"):
+    if stripped.startswith("<tool_call") or stripped.startswith("<name>") or stripped.startswith("<name="):
         return True
     # Detect informal tool header that Qwen uses
-    if re.match(r'^\s*Using Tool:', content, re.MULTILINE):
+    if re.match(r'^\s*Using Tool:', content, re.MULTILINE) or re.match(r'^\s*<name\s*=', content, re.MULTILINE):
         return True
     return False
 
