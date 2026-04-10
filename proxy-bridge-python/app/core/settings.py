@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     # Engine Settings
     ACTIVE_BACKEND: str = "lmstudio"
     VLLM_BASE_URL: str = "http://localhost:8000"
+    VLLM_MODEL: str = ""
 
     # LM Studio Settings
     LMSTUDIO_BASE_URL: str = "http://localhost:1234"

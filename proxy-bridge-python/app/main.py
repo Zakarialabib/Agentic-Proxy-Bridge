@@ -42,7 +42,20 @@ async def lifespan(app: FastAPI):
         logger.info("presets_loaded")
     except Exception as e:
         logger.warning("presets_load_failed", error=str(e))
+        
+    from app.core.settings import settings
+    if settings.ACTIVE_BACKEND == "vllm":
+        from app.services.vllm_manager import vllm_manager
+        logger.info("Starting vllm_manager")
+        await vllm_manager.start()
+
     yield
+    
+    if settings.ACTIVE_BACKEND == "vllm":
+        from app.services.vllm_manager import vllm_manager
+        logger.info("Stopping vllm_manager")
+        await vllm_manager.stop()
+
     await connection_pool.close_all()
     logger.info("shutdown_complete")
 

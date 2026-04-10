@@ -40,6 +40,7 @@ from cli.results.store import ResultStore
 from cli.runners.proxy_only import run_proxy_only
 from cli.runners.frontend_only import run_frontend_only
 from cli.runners.full_stack import run_full_stack
+from cli.proxy import register_proxy_command
 
 console = Console()
 store = ResultStore()
@@ -698,7 +699,7 @@ def mcp(base_url: str, model: str):
 
 
 register_git_workflow(cli)
-
+register_proxy_command(cli)
 
 if __name__ == "__main__":
     cli()
