@@ -84,7 +84,7 @@ export function AgenticToolbar() {
               No MCP servers registered
             </div>
           ) : (
-            servers.map((server) => (
+            servers.map((server: any) => (
               <div key={server.id} className="p-2 rounded-md bg-slate-900/40 border border-slate-700/30">
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-1.5">

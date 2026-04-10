@@ -58,6 +58,12 @@ export const POLLING_POLICIES = {
     refetchInterval: 60 * 1000, // 1 minute for log
     refetchOnWindowFocus: true,
   } as PollingPolicy,
+
+  // MCP
+  mcp: {
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: true,
+  } as PollingPolicy,
 } as const
 
 export type PollingPolicyKey = keyof typeof POLLING_POLICIES

@@ -1,42 +1,32 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PROXY_BRIDGE_URL } from '@/lib/config'
 import type { MCPServer, Tool } from '@/lib/types'
+import { gatePolling, getPollingPolicy } from '@/lib/polling-policies'
+import { useSettingsStore } from '@/stores/useSettingsStore'
 
 export function useMCP() {
-  const [servers, setServers] = useState<MCPServer[]>([])
-  const [tools, setTools] = useState<Tool[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { pollingEnabled, activeTab } = useSettingsStore()
+  const isActive = activeTab === 'mcp' || activeTab === 'chat'
+  const policy = gatePolling(getPollingPolicy('mcp'), pollingEnabled, isActive)
+  const refetchInterval = pollingEnabled && isActive ? 10000 : false
+  const queryClient = useQueryClient()
 
-  const fetchStatus = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['mcp-status'],
+    queryFn: async () => {
       const [serversRes, toolsRes] = await Promise.all([
         fetch(`${PROXY_BRIDGE_URL}/api/mcp/servers`),
         fetch(`${PROXY_BRIDGE_URL}/api/mcp/tools`)
       ])
-
-      if (serversRes.ok && toolsRes.ok) {
-        const serversData = await serversRes.json()
-        const toolsData = await toolsRes.json()
-        setServers(serversData.servers || [])
-        setTools(toolsData.tools || [])
-      } else {
-        setError('Failed to fetch MCP data')
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unknown error')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchStatus()
-    const interval = setInterval(fetchStatus, 10000) // Poll every 10s
-    return () => clearInterval(interval)
-  }, [fetchStatus])
+      if (!serversRes.ok || !toolsRes.ok) throw new Error('Failed to fetch MCP data')
+      
+      const serversData = await serversRes.json()
+      const toolsData = await toolsRes.json()
+      return { servers: serversData.servers || [], tools: toolsData.tools || [] }
+    },
+    ...policy,
+    refetchInterval
+  })
 
   const addServer = async (config: { id: string; name: string; command: string; args?: string[]; env?: Record<string, string> }) => {
     try {
@@ -46,13 +36,12 @@ export function useMCP() {
         body: JSON.stringify(config)
       })
       if (res.ok) {
-        await fetchStatus()
+        await queryClient.invalidateQueries({ queryKey: ['mcp-status'] })
       } else {
         const data = await res.json()
         throw new Error(data.detail || 'Failed to add server')
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add server')
       throw e
     }
   }
@@ -63,10 +52,10 @@ export function useMCP() {
         method: 'DELETE'
       })
       if (res.ok) {
-        await fetchStatus()
+        await queryClient.invalidateQueries({ queryKey: ['mcp-status'] })
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remove server')
+      console.error(e)
     }
   }
 
@@ -76,10 +65,10 @@ export function useMCP() {
         method: 'POST'
       })
       if (res.ok) {
-        await fetchStatus()
+        await queryClient.invalidateQueries({ queryKey: ['mcp-status'] })
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to connect server')
+      console.error(e)
     }
   }
 
@@ -89,19 +78,19 @@ export function useMCP() {
         method: 'POST'
       })
       if (res.ok) {
-        await fetchStatus()
+        await queryClient.invalidateQueries({ queryKey: ['mcp-status'] })
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to disconnect server')
+      console.error(e)
     }
   }
 
   return {
-    servers,
-    tools,
+    servers: data?.servers || [],
+    tools: data?.tools || [],
     isLoading,
-    error,
-    refresh: fetchStatus,
+    error: error instanceof Error ? error.message : error ? String(error) : null,
+    refresh: refetch,
     addServer,
     removeServer,
     connectServer,

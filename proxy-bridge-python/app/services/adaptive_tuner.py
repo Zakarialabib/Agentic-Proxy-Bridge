@@ -146,7 +146,7 @@ class AdaptiveTuner:
             
         return updated_presets, rationales
 
-    def generate_initial_preset(self, model_id: str) -> Dict[str, Any]:
+    def generate_initial_preset(self, model_id: str, is_embedding: bool = False) -> Dict[str, Any]:
         """
         Creates a hardware-aware initial preset.
         """
@@ -165,7 +165,13 @@ class AdaptiveTuner:
         gpu_offload = 0.0
         quantization_target = "Q4_K_M"
         
-        if is_pre_volta:
+        if is_embedding:
+            # Embedding models are small but shouldn't compete with the main LLM for VRAM
+            gpu_offload = 0.0
+            context_window = 8192
+            quantization_target = "F16" # Usually unquantized or minimal
+            description = f"Auto-tuned Embedding for {self.hardware.gpu_name or 'CPU'}"
+        elif is_pre_volta:
             # Pre-Volta architecture constraints (Bandwidth bottlenecked)
             context_window = min(4096, context_window)
             gpu_offload = min(0.8, vram / 16.0)

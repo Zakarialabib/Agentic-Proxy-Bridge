@@ -303,9 +303,9 @@ export async function traceACE(sessionId: string): Promise<{ session_id: string;
 
 // Presets
 export async function generatePreset(modelId: string, useCase: string): Promise<PresetConfig | null> {
-  return fetchProxy('/presets/generate', {
+  return fetchProxy('/api/presets/generate', {
     method: 'POST',
-    body: JSON.stringify({ model_id: modelId, use_case: useCase }),
+    body: JSON.stringify({ model_id: modelId, name: `${modelId}-auto`, type: useCase }),
   })
 }
 
@@ -496,19 +496,19 @@ export async function fetchAsyncTasks(): Promise<AsyncTask[] | null> {
 
 // Model Presets
 export async function fetchModelPresets(): Promise<ModelPresetConfig[] | null> {
-  const data = await fetchProxy<{ presets: ModelPresetConfig[] }>('/settings/presets')
+  const data = await fetchProxy<{ presets: ModelPresetConfig[] }>('/api/presets/list')
   return data?.presets ?? null
 }
 
 export async function createModelPreset(preset: Partial<ModelPresetConfig>): Promise<ModelPresetConfig | null> {
-  return fetchProxy('/settings/presets', {
+  return fetchProxy('/api/presets/create', {
     method: 'POST',
     body: JSON.stringify(preset),
   })
 }
 
 export async function deleteModelPreset(id: string): Promise<boolean | null> {
-  return fetchProxy(`/settings/presets/${id}`, { method: 'DELETE' })
+  return fetchProxy(`/api/presets/delete/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
 // Embedding & Gateway
