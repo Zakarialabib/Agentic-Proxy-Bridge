@@ -66,6 +66,23 @@ class VLLMAdapter(BackendAdapter):
 
     async def create_embedding(self, input: str | List[str], model: str = "") -> Dict[str, Any]:
         payload = {"model": model or settings.EMBED_MODEL, "input": input}
-        response = await self.client.post("/v1/embeddings", json=payload)
-        response.raise_for_status()
-        return response.json()
+        try:
+            # Try vLLM first (if it's serving an embedding model)
+            response = await self.client.post("/v1/embeddings", json=payload)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            # Fallback to LM Studio on port 1234
+            import httpx
+            async with httpx.AsyncClient() as client:
+                try:
+                    resp = await client.post(
+                        f"{settings.lm_studio_base_url}/v1/embeddings",
+                        json=payload,
+                        timeout=10.0
+                    )
+                    resp.raise_for_status()
+                    return resp.json()
+                except Exception:
+                    # If both fail, raise the original vLLM error
+                    raise e
