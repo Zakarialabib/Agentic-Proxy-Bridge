@@ -99,6 +99,12 @@ async def _apply_orchestration_features(payload: dict, tools_list: list | None) 
     # Build orchestration system prompt based on mode
     mode_prompt = build_orchestration_system_prompt(resolved_mode, payload.get("model"))
     
+    # Skip injecting XML rules for vLLM native tool calling
+    if settings.ACTIVE_BACKEND == "vllm":
+        # Keep only persona, environment, but drop XML rules.
+        import re
+        mode_prompt = re.sub(r"<rules>.*?</rules>", "", mode_prompt, flags=re.DOTALL).strip()
+    
     # Inject orchestration prompt into system message
     messages = payload.get("messages", [])
     if messages:
@@ -219,9 +225,13 @@ async def create_chat_completion(request: ChatCompletionRequest):
     context_limit = payload.pop("contextWindow", payload.pop("context_window", 16000))
     
     # Normalize system prompt to index 0, strip timestamps, and serialize tools to XML
-    payload["messages"] = normalize_system_prompt_and_tools(payload.get("messages", []), tools_list)
-    if "tools" in payload:
-        del payload["tools"]
+    if settings.ACTIVE_BACKEND == "vllm":
+        payload["messages"] = normalize_system_prompt_and_tools(payload.get("messages", []), None)
+        # Preserve tools array in payload for vLLM natively
+    else:
+        payload["messages"] = normalize_system_prompt_and_tools(payload.get("messages", []), tools_list)
+        if "tools" in payload:
+            del payload["tools"]
 
     # Get last user message for context strategy
     last_user_message = ""
@@ -247,7 +257,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
 
     # --- Cognitive Mode Switch (Initial Hop) ---
     # Only apply router mode hint if tools are provided (orchestration enabled)
-    if tools_list:
+    if tools_list and settings.ACTIVE_BACKEND != "vllm":
         payload["messages"].append({
             "role": "user",
             "content": "[COGNITIVE MODE: ROUTER]\nPick exactly one tool to use next. Do not provide any explanations or <think> blocks. Output only the tool call."

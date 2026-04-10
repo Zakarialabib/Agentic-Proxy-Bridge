@@ -58,6 +58,20 @@ python -m vllm.entrypoints.openai.api_server \
 > **Note on GGUF Support:** vLLM recently added support for GGUF quantization. If you are using GGUF files downloaded from LM Studio, you can point vLLM directly to the file path:
 > `--model /path/to/models/Qwen3.5-4B.gguf --quantization gguf`
 
+### Automatic Prefix Caching (APC)
+vLLM supports Automatic Prefix Caching (APC), which significantly reduces latency and compute for requests that share a common prefix (e.g., system prompts, few-shot examples, or multi-turn chat history). This is highly recommended for agentic workflows where the system prompt and tool descriptions remain constant across many turns.
+
+To enable APC, simply add the `--enable-prefix-caching` flag when starting the server:
+
+```bash
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen3.5-4B-Instruct \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --enable-prefix-caching
+```
+When enabled, vLLM will automatically cache and reuse the KV cache for shared prefixes, boosting Time To First Token (TTFT) and overall throughput.
+
 ---
 
 ## 3. Configuring the Proxy Bridge
@@ -118,7 +132,58 @@ In the Agentic Control Space within the UI:
 
 ---
 
-## 5. Troubleshooting
+## 5. Structured Outputs & Guided Generation
+
+vLLM natively supports guided generation (Structured Outputs) to force the model to output valid JSON, match a specific regex, or follow a JSON Schema. This is incredibly useful for tool calling and data extraction tasks where the response format must be deterministic.
+
+You can pass the `guided_json`, `guided_regex`, or `guided_choice` parameters in your API request. If you are interacting via the OpenAI-compatible API, you can use the `extra_body` parameter to pass these to vLLM.
+
+### Using JSON Schema (Guided JSON)
+When calling the vLLM endpoint, you can enforce a JSON schema to ensure the model's output strictly adheres to your required structure:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:8000/v1",
+    api_key="vllm",
+)
+
+# Define your desired JSON schema
+schema = {
+    "type": "object",
+    "properties": {
+        "tool_name": {"type": "string"},
+        "arguments": {"type": "object"}
+    },
+    "required": ["tool_name", "arguments"]
+}
+
+response = client.chat.completions.create(
+    model="Qwen/Qwen3.5-4B-Instruct",
+    messages=[
+        {"role": "user", "content": "Extract the tool call."}
+    ],
+    extra_body={"guided_json": schema}
+)
+```
+
+### Guided Regex and Choices
+Alternatively, you can constrain the output to a specific regex pattern or a set of choices:
+
+```python
+# Force output to match a regex (e.g., a specific ID format)
+extra_body = {"guided_regex": "^[a-zA-Z0-9]{8}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{12}$"}
+
+# Force output to be one of specific choices
+extra_body = {"guided_choice": ["approve", "reject", "escalate"]}
+```
+
+When integrating with the Proxy Bridge, these parameters can be injected into the payload before sending it to the vLLM backend, ensuring the Agentic UI always receives perfectly formatted tool calls.
+
+---
+
+## 6. Troubleshooting
 
 **Error: "Connection refused" or Timeout in UI**
 - Ensure vLLM has fully loaded the model into VRAM. It can take 1-3 minutes for vLLM to allocate the KV Cache blocks before it starts accepting HTTP requests. Watch the vLLM terminal for `Uvicorn running on http://0.0.0.0:8000`.

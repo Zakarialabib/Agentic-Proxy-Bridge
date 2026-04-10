@@ -345,8 +345,19 @@ async def intercept_and_execute_tools(
                             delta = choices[0].get("delta", {})
                             if delta.get("content"):
                                 content = delta["content"]
+                            if delta.get("tool_calls"):
+                                tc_list = delta["tool_calls"]
+                                if tc_list and isinstance(tc_list, list):
+                                    tc = tc_list[0]
+                                    fn = tc.get("function", {})
+                                    if fn.get("name"):
+                                        content += f"<tool_call>\n<name>{fn['name']}</name>\n<arguments>\n"
+                                    if fn.get("arguments"):
+                                        content += fn["arguments"]
                             if choices[0].get("finish_reason"):
                                 finish_reason = choices[0]["finish_reason"]
+                                if finish_reason == "tool_calls":
+                                    content += "\n</arguments>\n</tool_call>"
                                 
                         if content:
                             if _looks_like_tool_block(content) or _looks_like_tool_block(tool_call_buffer):

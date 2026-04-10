@@ -34,7 +34,8 @@ class VLLMManager:
                 sys.executable, "-m", "vllm.entrypoints.openai.api_server",
                 "--model", settings.VLLM_MODEL,
                 "--host", "0.0.0.0",
-                "--port", "8000"
+                "--port", "8000",
+                "--enable-prefix-caching"
             ]
             self.process = await asyncio.create_subprocess_exec(
                 *cmd,
