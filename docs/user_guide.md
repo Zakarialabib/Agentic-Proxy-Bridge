@@ -15,10 +15,21 @@ Complete workflows for the Proxy Bridge Control Space.
 - Start the local server (port 1234)
 - Load a model (e.g., `qwen3.5-4b`)
 
-### 2. Start the Proxy Bridge
+### 2. Start the Proxy Bridge (Interactive Mode)
+The recommended way to start the proxy is using the unified interactive CLI.
 ```bash
 cd proxy-bridge-python
-.\venv\Scripts\activate
+python -m cli.main proxy
+```
+Follow the interactive prompts to:
+- Select your active backend (**lmstudio** or **vllm**)
+- Automatically scan and select local models from your cache
+- Persist your configuration to `.env`
+- Automatically launch and manage background subprocesses (like vLLM)
+
+### 2b. Start the Proxy Bridge (Manual Mode)
+```bash
+cd proxy-bridge-python
 uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload
 ```
 
