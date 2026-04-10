@@ -8,7 +8,7 @@ async def get_embeddings(texts: List[str]) -> List[List[float]]:
         # Increased timeout to allow for JIT loading of the embedding model
         async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
-                f"{settings.lm_studio_base_url}/v1/embeddings",
+                f"{settings.backend_base_url}/v1/embeddings",
                 json={
                     "input": texts,
                     "model": settings.EMBED_MODEL or "text-embedding-qwen3",

@@ -232,7 +232,8 @@ curl -X POST http://localhost:3001/v1/chat/completions \
 | max_tokens | int | -1 | Maximum tokens to generate |
 | top_p | float | 1.0 | Nucleus sampling threshold |
 | contextWindow | int | 4096 | Context window size |
-| thinking | boolean | false | Enable thinking mode |
+| thinking | boolean | false | Enable thinking mode (extracts <thought> tags) |
+| require_approval | boolean | false | Pause for user confirmation before tool execution |
 
 ### POST /v1/completions
 
@@ -557,7 +558,14 @@ Advanced agentic pipeline orchestrator.
 
 **Notes**:
 - If `context_strategy`, `max_steps`, or `tool_budget` are omitted, the proxy may apply trigger-based defaults.
-- Streaming responses remain OpenAI-compatible; telemetry events include `trigger_profile` and trace details.
+- **`require_approval`**: If set to `true`, the orchestrator will yield an `ask_user_question` telemetry event and pause until the user sends a confirmation.
+- **Telemetry Stream**: Standard streaming responses include interleaved `telemetry` objects:
+    - `breadcrumb`: Concise reasoning recap for VRAM efficiency.
+    - `rollback`: Conversation state rewind after a malformed tool call.
+    - `compression`: Context window pruning notification.
+    - `hop`: Current agentic iteration and budget remaining.
+    - `mode_switch`: Cognitive strategy escalation (e.g., to a larger model).
+- **vLLM Impact**: When `ACTIVE_BACKEND` is `vllm`, throughput for these multi-hop calls is increased by ~3-4x.
 
 ### POST /v1/agent/trigger-preview
 

@@ -11,8 +11,19 @@ class Settings(BaseSettings):
     BRIDGE_HOST: str = "0.0.0.0"
     BRIDGE_PORT: int = 3001
 
+    # Engine Settings
+    ACTIVE_BACKEND: str = "lmstudio"
+    VLLM_BASE_URL: str = "http://localhost:8000"
+    VLLM_MODEL: str = ""
+
     # LM Studio Settings
     LMSTUDIO_BASE_URL: str = "http://localhost:1234"
+
+    @property
+    def backend_base_url(self) -> str:
+        if self.ACTIVE_BACKEND == "vllm":
+            return self.VLLM_BASE_URL.rstrip("/")
+        return self.LMSTUDIO_BASE_URL.rstrip("/")
 
     @property
     def lm_studio_base_url(self) -> str:

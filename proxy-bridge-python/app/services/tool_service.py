@@ -81,7 +81,7 @@ class ToolRegistry:
                 global _tool_registry_sync_disabled
                 try:
                     from app.core.settings import settings
-                    base_url = settings.lm_studio_base_url
+                    base_url = settings.backend_base_url
                     payload = {
                         "type": "function",
                         "function": {

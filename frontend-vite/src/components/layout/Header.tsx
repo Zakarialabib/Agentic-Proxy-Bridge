@@ -56,7 +56,9 @@ export function Header({ status, uptime, onSettingsClick, onRefresh }: HeaderPro
               )}
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white tracking-tight">LMStudio Proxy Bridge</h1>
+              <h1 className="text-lg font-bold text-white tracking-tight">
+                {status?.active_engine === 'vllm' ? 'vLLM' : 'LM Studio'} Proxy Bridge
+              </h1>
               <p className="text-xs text-slate-400">MCP/A2A • Knowledge Graph • Orchestration</p>
             </div>
           </div>
@@ -66,7 +68,7 @@ export function Header({ status, uptime, onSettingsClick, onRefresh }: HeaderPro
               <>
                 <StatusPill 
                   status={status.lmstudio_connected ? 'connected' : 'disconnected'} 
-                  label={status.lmstudio_connected ? 'LM Studio' : 'Disconnected'}
+                  label={status.lmstudio_connected ? (status.active_engine === 'vllm' ? 'vLLM' : 'LM Studio') : 'Disconnected'}
                   pulse 
                 />
                 <StatusPill 

@@ -67,7 +67,7 @@ export function DashboardHeader({ status, uptime, proxyPort }: DashboardHeaderPr
               <>
                 <StatusPill 
                   status={status.lmstudio_connected ? 'connected' : 'disconnected'} 
-                  label={status.lmstudio_connected ? 'LM Studio' : 'Disconnected'}
+                  label={status.lmstudio_connected ? (status.active_engine === 'vllm' ? 'vLLM' : 'LM Studio') : 'Disconnected'}
                   pulse 
                 />
                 <StatusPill 

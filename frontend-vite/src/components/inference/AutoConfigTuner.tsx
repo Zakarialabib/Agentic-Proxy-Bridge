@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Zap, Cpu, Loader2, Sparkles, Activity, CheckCircle, AlertTriangle } from 'lucide-react'
 import * as api from '@/lib/api'
 import type { ModelInfo, HardwareProfile, PresetConfig } from '@/lib/types'
+import { useSystemStatusData } from '@/hooks/use-system-status'
 
 interface AutoConfigTunerProps {
   model: ModelInfo
@@ -17,6 +18,9 @@ interface AutoConfigTunerProps {
 type WizardStep = 'hardware' | 'benchmarking' | 'result'
 
 export function AutoConfigTuner({ model, isOpen, onClose, onApply }: AutoConfigTunerProps) {
+  const { status } = useSystemStatusData()
+  const isVllm = status?.active_engine === 'vllm'
+
   const [step, setStep] = useState<WizardStep>('hardware')
   const [hardware, setHardware] = useState<HardwareProfile | null>(null)
   const [initialPreset, setInitialPreset] = useState<any | null>(null)
@@ -271,13 +275,21 @@ export function AutoConfigTuner({ model, isOpen, onClose, onApply }: AutoConfigT
           )}
           
           {step === 'result' && (
-            <Button 
-              onClick={() => onApply({ gpu_layers: gpuLayers, context_length: contextLength })}
-              className="bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 text-white"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              Apply Tuned Preset
-            </Button>
+            <div className="flex flex-col items-end gap-2">
+              <Button 
+                onClick={() => onApply({ gpu_layers: gpuLayers, context_length: contextLength })}
+                className="bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 text-white"
+                disabled={isVllm}
+              >
+                <Zap className="w-4 h-4 mr-2" />
+                Apply Tuned Preset
+              </Button>
+              {isVllm && (
+                <span className="text-[10px] text-amber-400 text-right leading-tight max-w-[200px]">
+                  vLLM manages models at startup. Preset cannot be applied dynamically.
+                </span>
+              )}
+            </div>
           )}
         </DialogFooter>
       </DialogContent>

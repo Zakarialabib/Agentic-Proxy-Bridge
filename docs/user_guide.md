@@ -15,10 +15,21 @@ Complete workflows for the Proxy Bridge Control Space.
 - Start the local server (port 1234)
 - Load a model (e.g., `qwen3.5-4b`)
 
-### 2. Start the Proxy Bridge
+### 2. Start the Proxy Bridge (Interactive Mode)
+The recommended way to start the proxy is using the unified interactive CLI.
 ```bash
 cd proxy-bridge-python
-.\venv\Scripts\activate
+python -m cli.main proxy
+```
+Follow the interactive prompts to:
+- Select your active backend (**lmstudio** or **vllm**)
+- Automatically scan and select local models from your cache
+- Persist your configuration to `.env`
+- Automatically launch and manage background subprocesses (like vLLM)
+
+### 2b. Start the Proxy Bridge (Manual Mode)
+```bash
+cd proxy-bridge-python
 uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload
 ```
 
@@ -90,12 +101,9 @@ Open http://localhost:5173
 ### Using a Scenario
 1. Navigate to **Control Space**
 2. Open the **Scenarios** panel
-3. Click a scenario card:
-   - **Code Assistant**: Optimized for programming tasks
-   - **Deep Researcher**: Extended context, analytical prompts
-   - **Creative Writer**: Higher temperature, creative prompts
-   - **Data Analyst**: Structured output, precise responses
-4. The system automatically applies:
+3. Click a scenario card (e.g., **Code Assistant**)
+4. **Supervised Autonomy**: Toggle **Require Tool Approval** in the toolbar if you want to gate sensitive tool executions (like `write_file` or `web_search`).
+5. The system automatically applies:
    - System prompt
    - Compute parameters (temperature, top_p, max_tokens)
    - Available tools

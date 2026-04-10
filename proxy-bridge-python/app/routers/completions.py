@@ -8,7 +8,7 @@ import time
 import json
 import httpx
 
-from app.adapters.lmstudio import LMStudioAdapter
+from app.adapters import get_active_adapter
 from app.core.settings import settings
 
 router = APIRouter(prefix="/v1", tags=["Completions"])
@@ -36,7 +36,7 @@ class CompletionRequest(BaseModel):
 @router.post("/completions")
 async def create_completion(request: CompletionRequest):
     """Legacy completions endpoint (text-in, text-out)."""
-    adapter = LMStudioAdapter(base_url=settings.LMSTUDIO_BASE_URL)
+    adapter = get_active_adapter()
     try:
         messages = [{"role": "user", "content": request.prompt if isinstance(request.prompt, str) else "\n".join(request.prompt)}]
 
@@ -123,7 +123,7 @@ async def create_completion(request: CompletionRequest):
 @router.get("/completions/models/{model_id}")
 async def get_model_details(model_id: str):
     """Get detailed model information."""
-    adapter = LMStudioAdapter(base_url=settings.LMSTUDIO_BASE_URL)
+    adapter = get_active_adapter()
     try:
         models = await adapter.list_models()
         model = next((m for m in models if m.get("id") == model_id), None)

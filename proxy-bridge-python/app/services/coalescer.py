@@ -81,7 +81,7 @@ class EmbeddingCoalescer:
         try:
             async with connection_pool.track_connection():
                 response = await client.post(
-                    f"{settings.lm_studio_base_url}/v1/embeddings",
+                    f"{settings.backend_base_url}/v1/embeddings",
                     json=payload,
                     headers=headers
                 )

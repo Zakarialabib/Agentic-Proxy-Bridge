@@ -2,6 +2,7 @@
 
 export interface ProxyStatus {
   status: string
+  active_engine?: 'lmstudio' | 'vllm'
   lmstudio_connected: boolean
   tools_registered: number
   approval_mode: string

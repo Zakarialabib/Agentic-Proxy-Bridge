@@ -32,11 +32,12 @@ Vite React Web (http://localhost:5173)
 | [Scenario Presets](./scenario_presets.md) | Pre-configured scenario templates for common use cases |
 | [Performance Tuning](./performance_tuning.md) | Hardware-specific optimizations, memory management, network tuning |
 
-### Architecture & Testing
+### Architecture, Testing & Superpowers
 | Document | Description |
 |----------|-------------|
 | [Architecture](./architecture_consolidated.md) | Deep dive into system architecture, ReAct loop, connection pooling |
 | [Testing Guide](./testing_guide.md) | CLI testing suite documentation, step-by-step test execution |
+| [Superpowers](./superpowers/plans/) | Evolutionary roadmap and design specs for agentic features |
 
 ## Core API Surface
 

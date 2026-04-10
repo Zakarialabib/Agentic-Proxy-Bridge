@@ -57,6 +57,13 @@ Manage external tool servers and agent-to-agent communication.
 - **MCP Servers**: View connected Model Context Protocol servers and their tools.
 - **A2A Agents**: Monitor agent-to-agent communication channels.
 
+### ⚡ Superpowers (Agentic Engine)
+The Proxy Bridge features an "Evolutionary Architecture" that unlocks advanced agentic capabilities:
+- **Autonomous Tool Discovery**: Instantly scans your local hardware and software to register available tools.
+- **Hardware-Aware Orchestration**: Automatically tunes KV cache and GPU offloading based on your specific VRAM budget.
+- **Rich Interactive Artifacts**: Generates structured, interactive UI components directly in the chat stream.
+- **NeMo Guardrail Integration**: Validates model output using distilled reasoning buffers.
+
 ### 7. Observability
 Deep system analytics, tool health monitoring, and performance optimization.
 - **Tool Health**: Real-time monitoring of tool execution success rates and latency.
@@ -88,13 +95,16 @@ DATABASE_URL=sqlite+aiosqlite:///../dev.db
 ```
 
 ### 3. Start the Python Proxy Backend
+**Recommended (Interactive Mode):**
 ```bash
 cd proxy-bridge-python
-python -m venv venv
-.\venv\Scripts\activate  # On Windows
-pip install -r requirements.txt
+python -m cli.main proxy
+```
+This launches a beautiful, interactive TUI that handles backend selection (LM Studio vs vLLM), automatic model scanning from your cache, and unified subprocess management.
 
-# Run the proxy on port 3001
+**Manual Mode:**
+```bash
+cd proxy-bridge-python
 uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload
 ```
 

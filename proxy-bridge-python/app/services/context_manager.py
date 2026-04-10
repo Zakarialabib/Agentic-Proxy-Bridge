@@ -6,7 +6,7 @@ import time
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 from app.core.settings import settings
-from app.adapters.lmstudio import LMStudioAdapter
+from app.adapters import get_active_adapter
 
 
 @dataclass
@@ -193,7 +193,7 @@ class LMStudioContextController:
     Dynamically adjusts LM Studio's context window based on agent state.
     """
     def __init__(self, base_url: str = None):
-        self.base_url = base_url or settings.lm_studio_base_url
+        self.base_url = base_url or settings.backend_base_url
         self.current_context = 4096  # Start conservative
         self.current_gpu_layers = 32  # Assume a full layer budget until tuned
         self.current_model_id: Optional[str] = None
@@ -224,7 +224,9 @@ class LMStudioContextController:
         Reload the active model with a new context length.
         """
         try:
-            async with LMStudioAdapter(base_url=self.base_url) as adapter:
+            if settings.ACTIVE_BACKEND != "lmstudio":
+                return
+            async with get_active_adapter() as adapter:
                 if not self.current_model_id:
                     print("[Agentic Bridge] No active model id available for context tuning")
                     return

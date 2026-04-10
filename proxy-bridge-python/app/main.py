@@ -42,7 +42,20 @@ async def lifespan(app: FastAPI):
         logger.info("presets_loaded")
     except Exception as e:
         logger.warning("presets_load_failed", error=str(e))
+        
+    from app.core.settings import settings
+    if settings.ACTIVE_BACKEND == "vllm":
+        from app.services.vllm_manager import vllm_manager
+        logger.info("Starting vllm_manager")
+        await vllm_manager.start()
+
     yield
+    
+    if settings.ACTIVE_BACKEND == "vllm":
+        from app.services.vllm_manager import vllm_manager
+        logger.info("Stopping vllm_manager")
+        await vllm_manager.stop()
+
     await connection_pool.close_all()
     logger.info("shutdown_complete")
 
@@ -103,17 +116,18 @@ app.include_router(ace_router, prefix="/api/ace", tags=["ACE"])
 @app.get("/health")
 async def health_check():
     """Check bridge and LM Studio connectivity."""
+    from app.core.settings import settings
     health = {
         "status": "ok",
         "bridge": "running",
         "lmstudio": "unknown",
         "uptime_seconds": round(time.time() - START_TIME, 1),
+        "active_engine": settings.ACTIVE_BACKEND,
     }
     try:
-        from app.adapters.lmstudio import LMStudioAdapter
-        from app.core.settings import settings
+        from app.adapters import get_active_adapter
 
-        adapter = LMStudioAdapter(base_url=settings.LMSTUDIO_BASE_URL)
+        adapter = get_active_adapter()
         await adapter.list_models()
         health["lmstudio"] = "connected"
         await adapter.close()
@@ -127,12 +141,12 @@ async def health_check():
 @app.get("/status")
 async def frontend_status():
     """Frontend-compatible status endpoint matching ProxyStatus type."""
-    from app.adapters.lmstudio import LMStudioAdapter
+    from app.adapters import get_active_adapter
     from app.core.settings import settings
 
     lmstudio_connected = False
     try:
-        adapter = LMStudioAdapter(base_url=settings.LMSTUDIO_BASE_URL)
+        adapter = get_active_adapter()
         await adapter.list_models()
         lmstudio_connected = True
         await adapter.close()
@@ -144,6 +158,7 @@ async def frontend_status():
         "lmstudio_connected": lmstudio_connected,
         "tools_registered": 0,
         "approval_mode": settings.APPROVAL_MODE,
+        "active_engine": settings.ACTIVE_BACKEND,
         "active_sessions": 0,
         "documents_indexed": 0,
         "knowledge_graph": {"nodes": 0, "edges": 0, "documents": {"count": 0}},
@@ -268,11 +283,12 @@ async def get_embedding_presets():
 @app.get("/api/status")
 async def system_status():
     """Full system status: models loaded, VRAM, uptime, hardware."""
-    from app.adapters.lmstudio import LMStudioAdapter
+    from app.adapters import get_active_adapter
     from app.core.settings import settings
 
     status = {
         "status": "ok",
+        "active_engine": settings.ACTIVE_BACKEND,
         "uptime_seconds": round(time.time() - START_TIME, 1),
         "hardware": {},
         "models": {
@@ -302,7 +318,7 @@ async def system_status():
 
     lmstudio_connected = False
     try:
-        adapter = LMStudioAdapter(base_url=settings.LMSTUDIO_BASE_URL)
+        adapter = get_active_adapter()
         loaded = await adapter.get_loaded_models()
         status["models"]["loaded"] = [
             {

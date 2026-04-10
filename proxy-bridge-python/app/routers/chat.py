@@ -97,7 +97,13 @@ async def _apply_orchestration_features(payload: dict, tools_list: list | None) 
         resolved_context_strategy = "full"
     
     # Build orchestration system prompt based on mode
-    mode_prompt = build_orchestration_system_prompt(resolved_mode)
+    mode_prompt = build_orchestration_system_prompt(resolved_mode, payload.get("model"))
+    
+    # Skip injecting XML rules for vLLM native tool calling
+    if settings.ACTIVE_BACKEND == "vllm":
+        # Keep only persona, environment, but drop XML rules.
+        import re
+        mode_prompt = re.sub(r"<rules>.*?</rules>", "", mode_prompt, flags=re.DOTALL).strip()
     
     # Inject orchestration prompt into system message
     messages = payload.get("messages", [])
@@ -193,7 +199,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
     
     # Explicit Model Validation for OpenAI Compliance
     try:
-        models_resp = await client.get(f"{settings.lm_studio_base_url}/v1/models")
+        models_resp = await client.get(f"{settings.backend_base_url}/v1/models")
         if models_resp.status_code == 200:
             available_models = [m["id"] for m in models_resp.json().get("data", [])]
             if mapped_model not in available_models and mapped_model != "test-model":
@@ -219,9 +225,13 @@ async def create_chat_completion(request: ChatCompletionRequest):
     context_limit = payload.pop("contextWindow", payload.pop("context_window", 16000))
     
     # Normalize system prompt to index 0, strip timestamps, and serialize tools to XML
-    payload["messages"] = normalize_system_prompt_and_tools(payload.get("messages", []), tools_list)
-    if "tools" in payload:
-        del payload["tools"]
+    if settings.ACTIVE_BACKEND == "vllm":
+        payload["messages"] = normalize_system_prompt_and_tools(payload.get("messages", []), None)
+        # Preserve tools array in payload for vLLM natively
+    else:
+        payload["messages"] = normalize_system_prompt_and_tools(payload.get("messages", []), tools_list)
+        if "tools" in payload:
+            del payload["tools"]
 
     # Get last user message for context strategy
     last_user_message = ""
@@ -247,7 +257,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
 
     # --- Cognitive Mode Switch (Initial Hop) ---
     # Only apply router mode hint if tools are provided (orchestration enabled)
-    if tools_list:
+    if tools_list and settings.ACTIVE_BACKEND != "vllm":
         payload["messages"].append({
             "role": "user",
             "content": "[COGNITIVE MODE: ROUTER]\nPick exactly one tool to use next. Do not provide any explanations or <think> blocks. Output only the tool call."
@@ -261,7 +271,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
         try:
             req = client.build_request(
                 "POST",
-                f"{settings.lm_studio_base_url}/v1/chat/completions",
+                f"{settings.backend_base_url}/v1/chat/completions",
                 json=payload,
                 headers=headers,
                 timeout=httpx.Timeout(600.0, connect=10.0)
@@ -311,7 +321,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
         try:
             async with connection_pool.track_connection():
                 response = await client.post(
-                    f"{settings.lm_studio_base_url}/v1/chat/completions",
+                    f"{settings.backend_base_url}/v1/chat/completions",
                     json=payload,
                     headers=headers
                 )
