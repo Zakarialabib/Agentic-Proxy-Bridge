@@ -62,7 +62,7 @@ async def create_completion(request: CompletionRequest):
         if request.stream:
             async def stream_generator():
                 try:
-                    async with httpx.AsyncClient(timeout=120.0) as client:
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=10.0)) as client:
                         async with client.stream(
                             "POST",
                             f"{settings.LMSTUDIO_BASE_URL}/v1/chat/completions",
@@ -81,7 +81,7 @@ async def create_completion(request: CompletionRequest):
 
             return StreamingResponse(stream_generator(), media_type="text/event-stream")
         else:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=10.0)) as client:
                 resp = await client.post(
                     f"{settings.LMSTUDIO_BASE_URL}/v1/chat/completions",
                     json=payload,

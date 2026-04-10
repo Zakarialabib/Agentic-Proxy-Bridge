@@ -17,7 +17,7 @@ class ConnectionPool:
         if provider not in self._clients:
             # Configure limits for the pool
             limits = httpx.Limits(max_keepalive_connections=100, max_connections=200)
-            timeout = httpx.Timeout(300.0) # Increased to support large context generation
+            timeout = httpx.Timeout(600.0, connect=10.0) # Increased to 10 minutes to support massive context generation and slow distilled models
             client = httpx.AsyncClient(limits=limits, timeout=timeout)
             self._clients[provider] = client
         return self._clients[provider]

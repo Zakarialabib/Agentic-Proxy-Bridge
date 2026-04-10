@@ -99,7 +99,8 @@ async def create_chat_completion(request: ChatCompletionRequest):
                 "POST",
                 f"{settings.lm_studio_base_url}/v1/chat/completions",
                 json=payload,
-                headers=headers
+                headers=headers,
+                timeout=httpx.Timeout(600.0, connect=10.0)
             )
             response = await client.send(req, stream=True)
             response.raise_for_status()
