@@ -211,24 +211,13 @@ class LMStudioContextController:
         which causes massive performance degradation on multi-hop agent requests.
         """
         return
-            
+        
     async def _set_gpu_layers(self, layers: int):
         """
         Dynamically adjusts the active model by reloading it with a different GPU layer budget.
         """
-        try:
-            async with LMStudioAdapter(base_url=self.base_url) as adapter:
-                if not self.current_model_id:
-                    print("[Predictive Unloading] No active model id available for gpu layer tuning")
-                    return
-                await adapter.load_model(
-                    self.current_model_id,
-                    gpu_layers=layers,
-                    context_length=self.current_context,
-                )
-                print(f"[Predictive Unloading] Reloaded {self.current_model_id} with gpu_layers={layers}")
-        except Exception as e:
-            print(f"[Predictive Unloading] Error adjusting gpu_layers: {str(e)}")
+        return
+
             
     async def _set_context_length(self, length: int):
         """

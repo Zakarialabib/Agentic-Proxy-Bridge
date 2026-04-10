@@ -271,24 +271,6 @@ async def intercept_and_execute_tools(
     from app.services.context_manager import context_controller
 
     while recursive_hops < max_react_steps:
-        # --- Cognitive Mode Switch (Predictive Unloading) ---
-        is_router_mode = (recursive_hops < 2)
-        cognitive_mode = "router" if is_router_mode else "reasoning"
-        
-        # Before each hop, adjust context based on accumulated tool payload
-        tool_results_size = sum(
-            len(_content_to_text(msg.get("content", "")))
-            for msg in current_messages
-            if msg.get("role") == "user" and "<tool_response>" in _content_to_text(msg.get("content", ""))
-        )
-        await context_controller.adjust_for_trajectory(
-            recursive_hops,
-            tool_results_size,
-            cognitive_mode,
-            model_id=original_payload.get("model"),
-        )
-        # ----------------------------------------------------
-
         recursive_hops += 1
         is_tool_call_mode = False
         tool_call_buffer = ""
