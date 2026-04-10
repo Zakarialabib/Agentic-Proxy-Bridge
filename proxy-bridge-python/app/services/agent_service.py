@@ -172,12 +172,42 @@ def prioritize_tools_for_mode(tools: List[Dict[str, Any]], mode: Optional[str]) 
     return ordered
 
 
-def build_orchestration_system_prompt(mode: Optional[str]) -> str:
+def build_orchestration_system_prompt(mode: Optional[str], model: Optional[str] = None) -> str:
     profile = build_orchestration_profile(mode)
     
     current_os = platform.system()
     current_cwd = os.getcwd()
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    is_qwen = model and "qwen" in str(model).lower()
+
+    if is_qwen:
+        rules = (
+            f"<rules>\n"
+            f"  1. Tool calls MUST use JSON within XML format exactly like this:\n"
+            f"     <tool_call>\n"
+            f"     {{\"name\": \"tool_name\", \"arguments\": {{\"arg_name\": \"value\"}}}}\n"
+            f"     </tool_call>\n"
+            f"  2. Do not invent file paths. If a path is unknown, call file_list first or ask the user.\n"
+            f"  3. You MUST wrap your reasoning in <think>...</think> blocks before calling tools or responding.\n"
+            f"  4. You MUST use <reflection>...</reflection> blocks to evaluate the results of tool calls and adjust your plan.\n"
+            f"</rules>"
+        )
+    else:
+        rules = (
+            f"<rules>\n"
+            f"  1. Tool calls should use XML format:\n"
+            f"     <tool_call>\n"
+            f"       <name>tool_name</name>\n"
+            f"       <arguments>\n"
+            f"         <arg_name>value</arg_name>\n"
+            f"       </arguments>\n"
+            f"     </tool_call>\n"
+            f"  2. Do not invent file paths. If a path is unknown, call file_list first or ask the user.\n"
+            f"  3. You MUST wrap your reasoning in <thought>...</thought> blocks before calling tools or responding.\n"
+            f"  4. You MUST use <reflection>...</reflection> blocks to evaluate the results of tool calls and adjust your plan.\n"
+            f"</rules>"
+        )
 
     return (
         f"<persona>\n{profile['system_prompt']}\n</persona>\n\n"
@@ -186,18 +216,7 @@ def build_orchestration_system_prompt(mode: Optional[str]) -> str:
         f"  <cwd>{current_cwd}</cwd>\n"
         f"  <time>{current_time}</time>\n"
         f"</environment>\n\n"
-        f"<rules>\n"
-        f"  1. Tool calls should use XML format:\n"
-        f"     <tool_call>\n"
-        f"       <name>tool_name</name>\n"
-        f"       <arguments>\n"
-        f"         <arg_name>value</arg_name>\n"
-        f"       </arguments>\n"
-        f"     </tool_call>\n"
-        f"  2. Do not invent file paths. If a path is unknown, call file_list first or ask the user.\n"
-        f"  3. You MUST wrap your reasoning in <thought>...</thought> blocks before calling tools or responding.\n"
-        f"  4. You MUST use <reflection>...</reflection> blocks to evaluate the results of tool calls and adjust your plan.\n"
-        f"</rules>"
+        f"{rules}"
     )
 
 async def _compress_tool_result(result_str: str, tool_name: str, model_id: str) -> str:
@@ -219,7 +238,7 @@ async def _compress_tool_result(result_str: str, tool_name: str, model_id: str) 
         }
         
         resp = await client.post(
-            f"{settings.lm_studio_base_url}/v1/chat/completions",
+            f"{settings.backend_base_url}/v1/chat/completions",
             json=payload,
             headers=headers,
             timeout=15.0
@@ -442,7 +461,7 @@ async def intercept_and_execute_tools(
                 timeout = httpx.Timeout(300.0, connect=10.0)
                 req = client.build_request(
                     "POST", 
-                    f"{settings.lm_studio_base_url}/v1/chat/completions",
+                    f"{settings.backend_base_url}/v1/chat/completions",
                     json=follow_up_payload,
                     headers=headers,
                     timeout=timeout
@@ -667,7 +686,7 @@ async def intercept_and_execute_tools(
                 
                 req = client.build_request(
                     "POST", 
-                    f"{settings.lm_studio_base_url}/v1/chat/completions",
+                    f"{settings.backend_base_url}/v1/chat/completions",
                     json=follow_up_payload,
                     headers=headers,
                     timeout=timeout

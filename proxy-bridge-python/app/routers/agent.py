@@ -75,7 +75,7 @@ async def orchestrate_agent(request: AgentOrchestrateRequest):
     tool_budget = request.tool_budget if request.tool_budget is not None else recommended.get("tool_budget")
 
     # Shape the prompt and tools for the chosen orchestration mode before preset/context handling.
-    mode_prompt = build_orchestration_system_prompt(orchestration_mode)
+    mode_prompt = build_orchestration_system_prompt(orchestration_mode, chat_payload.get("model"))
     messages = chat_payload.get("messages", [])
     if messages:
         if messages[0].get("role") == "system":
@@ -210,7 +210,7 @@ async def orchestrate_agent(request: AgentOrchestrateRequest):
             try:
                 req = client.build_request(
                     "POST",
-                    f"{settings.lm_studio_base_url}/v1/chat/completions",
+                    f"{settings.backend_base_url}/v1/chat/completions",
                     json=outbound_payload,
                     headers=headers
                 )
@@ -227,7 +227,7 @@ async def orchestrate_agent(request: AgentOrchestrateRequest):
         else:
             async with connection_pool.track_connection():
                 response = await client.post(
-                    f"{settings.lm_studio_base_url}/v1/chat/completions",
+                    f"{settings.backend_base_url}/v1/chat/completions",
                     json=outbound_payload,
                     headers=headers
                 )

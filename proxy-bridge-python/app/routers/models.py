@@ -3,13 +3,13 @@ from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Body
 from app.schemas import ModelListResponse
 from app.core.settings import settings
-from app.adapters.lmstudio import LMStudioAdapter
+from app.adapters import get_active_adapter
 
 router = APIRouter(tags=["Models"])
 
 @router.get("/v1/models")
 async def list_models_v1():
-    async with LMStudioAdapter() as adapter:
+    async with get_active_adapter() as adapter:
         try:
             models = await adapter.list_models()
             return {"object": "list", "data": models}
@@ -18,7 +18,7 @@ async def list_models_v1():
 
 @router.get("/models/available")
 async def get_available_models():
-    async with LMStudioAdapter() as adapter:
+    async with get_active_adapter() as adapter:
         try:
             models = await adapter.list_models()
             available = []
@@ -42,7 +42,7 @@ async def get_available_models():
 
 @router.get("/models/loaded")
 async def get_loaded_models():
-    async with LMStudioAdapter() as adapter:
+    async with get_active_adapter() as adapter:
         try:
             loaded = await adapter.get_loaded_models()
             return {
@@ -95,7 +95,7 @@ async def load_model(payload: Dict[str, Any] = Body(...)):
         print(f"[Bridge Proxy] Warning: Failed to apply dynamic quantization interception: {e}")
     # ----------------------------------------
     
-    async with LMStudioAdapter() as adapter:
+    async with get_active_adapter() as adapter:
         try:
             # Pass remaining payload kwargs to LM Studio
             kwargs = {k: v for k, v in payload.items() if k != "model"}
@@ -115,7 +115,7 @@ async def unload_model(payload: Dict[str, Any] = Body(...)):
     if not model_id:
         raise HTTPException(status_code=400, detail="model id required")
         
-    async with LMStudioAdapter() as adapter:
+    async with get_active_adapter() as adapter:
         try:
             await adapter.unload_model(model_id)
             return {"status": "unloaded", "instance_id": model_id}
